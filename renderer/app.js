@@ -432,6 +432,65 @@ function showToast(msg, type = "success") {
   }, 3000);
 }
 
+// ---- Auto Update ----
+
+function setupAutoUpdate() {
+  const banner = $("#updateBanner");
+  const text = $("#updateText");
+  const progressBar = $("#updateProgressBar");
+  const progressFill = $("#updateProgressFill");
+  const btnDownload = $("#btnDownloadUpdate");
+  const btnInstall = $("#btnInstallUpdate");
+  const btnClose = $("#btnCloseBanner");
+
+  window.api.onUpdateAvailable((version) => {
+    banner.style.display = "flex";
+    text.textContent = `Phiên bản mới ${version} đã sẵn sàng!`;
+    btnDownload.style.display = "";
+    btnInstall.style.display = "none";
+    progressBar.style.display = "none";
+  });
+
+  window.api.onUpdateNotAvailable(() => {
+    // App is up to date, no banner needed
+  });
+
+  window.api.onUpdateDownloadProgress((percent) => {
+    text.textContent = `Đang tải bản cập nhật... ${percent}%`;
+    progressBar.style.display = "";
+    progressFill.style.width = percent + "%";
+    btnDownload.style.display = "none";
+  });
+
+  window.api.onUpdateDownloaded(() => {
+    text.textContent = "Bản cập nhật đã tải xong!";
+    progressBar.style.display = "none";
+    btnDownload.style.display = "none";
+    btnInstall.style.display = "";
+  });
+
+  window.api.onUpdateError((msg) => {
+    console.error("Update error:", msg);
+    banner.style.display = "none";
+  });
+
+  btnDownload.addEventListener("click", () => {
+    window.api.downloadUpdate();
+    btnDownload.style.display = "none";
+    text.textContent = "Đang bắt đầu tải...";
+    progressBar.style.display = "";
+  });
+
+  btnInstall.addEventListener("click", () => {
+    window.api.installUpdate();
+  });
+
+  btnClose.addEventListener("click", () => {
+    banner.style.display = "none";
+  });
+}
+
 // ---- Start ----
 
 init();
+setupAutoUpdate();

@@ -8,10 +8,14 @@
     "dev": "cross-env ELECTRON_RUN_AS_NODE= NODE_ENV=development electron .",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build": "electron-builder --win --mac"
+    "build": "electron-builder --win --mac",
+    "publish:win": "electron-builder --win --publish always",
+    "publish:mac": "electron-builder --mac --publish always",
+    "publish": "electron-builder --win --mac --publish always"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
+    "electron-updater": "^6.8.3",
     "mssql": "^12.2.0"
   },
   "devDependencies": {
@@ -23,6 +27,13 @@
   "build": {
     "appId": "com.chothuduc.quanlyxe",
     "productName": "Quan Ly Xe - Cho Thu Duc",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tringuyen94",
+        "repo": "quan-ly-xe-mien-phi"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -46,11 +57,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": null
@@ -58,11 +73,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["vi"],
+      "installerLanguages": [
+        "vi"
+      ],
       "language": "1066"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.business"
     }
   }

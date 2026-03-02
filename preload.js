@@ -7,4 +7,13 @@ contextBridge.exposeInMainWorld("api", {
   updateExpiry: (tableName, ids, newValue) => ipcRenderer.invoke("update-expiry", tableName, ids, newValue),
   updateStatus: (tableName, ids, newStatus) => ipcRenderer.invoke("update-status", tableName, ids, newStatus),
   testConnection: () => ipcRenderer.invoke("test-connection"),
+
+  onUpdateAvailable: (cb) => ipcRenderer.on("update-available", (_e, version) => cb(version)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on("update-not-available", () => cb()),
+  onUpdateDownloadProgress: (cb) => ipcRenderer.on("update-download-progress", (_e, percent) => cb(percent)),
+  onUpdateDownloaded: (cb) => ipcRenderer.on("update-downloaded", () => cb()),
+  onUpdateError: (cb) => ipcRenderer.on("update-error", (_e, msg) => cb(msg)),
+  downloadUpdate: () => ipcRenderer.invoke("update-download"),
+  installUpdate: () => ipcRenderer.invoke("update-install"),
+  checkForUpdate: () => ipcRenderer.invoke("update-check"),
 });

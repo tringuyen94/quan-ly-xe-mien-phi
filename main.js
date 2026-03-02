@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const sql = require("mssql");
 
@@ -80,6 +81,8 @@ function createWindow() {
   if (!isProd) {
     win.webContents.openDevTools({ mode: "detach" });
   }
+
+  return win;
 }
 
 // ---- IPC Handlers ----
@@ -166,9 +169,55 @@ ipcMain.handle("test-connection", async () => {
   }
 });
 
+// ---- Auto Updater ----
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+function setupAutoUpdater(win) {
+  autoUpdater.on("update-available", (info) => {
+    win.webContents.send("update-available", info.version);
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    win.webContents.send("update-not-available");
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    win.webContents.send("update-download-progress", Math.round(progress.percent));
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    win.webContents.send("update-downloaded");
+  });
+
+  autoUpdater.on("error", (err) => {
+    win.webContents.send("update-error", err.message);
+  });
+
+  if (isProd) {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
+}
+
+ipcMain.handle("update-download", () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.handle("update-install", () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+ipcMain.handle("update-check", () => {
+  autoUpdater.checkForUpdates().catch(() => {});
+});
+
 // ---- App lifecycle ----
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  const win = createWindow();
+  setupAutoUpdater(win);
+});
 
 app.on("window-all-closed", async () => {
   if (pool) {
