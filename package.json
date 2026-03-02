@@ -11,7 +11,10 @@
     "build": "electron-builder --win --mac",
     "publish:win": "electron-builder --win --publish always",
     "publish:mac": "electron-builder --mac --publish always",
-    "publish": "electron-builder --win --mac --publish always"
+    "publish": "electron-builder --win --mac --publish always",
+    "release:win": "source .env && GH_TOKEN=$GH_TOKEN npm run publish:win",
+    "release:mac": "source .env && GH_TOKEN=$GH_TOKEN npm run publish:mac",
+    "release": "source .env && GH_TOKEN=$GH_TOKEN npm run publish"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
