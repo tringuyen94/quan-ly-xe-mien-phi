@@ -160,6 +160,10 @@ ipcMain.handle("update-status", async (_event, tableName, ids, newStatus) => {
   }
 });
 
+ipcMain.handle("get-app-version", () => {
+  return app.getVersion();
+});
+
 ipcMain.handle("test-connection", async () => {
   try {
     await getPool();
@@ -212,21 +216,38 @@ ipcMain.handle("update-check", () => {
   autoUpdater.checkForUpdates().catch(() => {});
 });
 
-// ---- App lifecycle ----
+// ---- App lifecycle (Single Instance) ----
 
-app.whenReady().then(() => {
-  const win = createWindow();
-  setupAutoUpdater(win);
-});
+const gotLock = app.requestSingleInstanceLock();
 
-app.on("window-all-closed", async () => {
-  if (pool) {
-    await pool.close();
-    pool = null;
-  }
+if (!gotLock) {
   app.quit();
-});
+} else {
+  let mainWindow = null;
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    mainWindow = createWindow();
+    setupAutoUpdater(mainWindow);
+  });
+
+  app.on("window-all-closed", async () => {
+    if (pool) {
+      await pool.close();
+      pool = null;
+    }
+    app.quit();
+  });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      mainWindow = createWindow();
+    }
+  });
+}

@@ -54,6 +54,9 @@ async function init() {
     return;
   }
 
+  const version = await window.api.getAppVersion();
+  $("#appVersion").textContent = `v${version}`;
+
   setupThemeToggle();
   setupTabs();
   setupSearch();

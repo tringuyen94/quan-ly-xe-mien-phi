@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("api", {
   updateExpiry: (tableName, ids, newValue) => ipcRenderer.invoke("update-expiry", tableName, ids, newValue),
   updateStatus: (tableName, ids, newStatus) => ipcRenderer.invoke("update-status", tableName, ids, newStatus),
   testConnection: () => ipcRenderer.invoke("test-connection"),
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
 
   onUpdateAvailable: (cb) => ipcRenderer.on("update-available", (_e, version) => cb(version)),
   onUpdateNotAvailable: (cb) => ipcRenderer.on("update-not-available", () => cb()),

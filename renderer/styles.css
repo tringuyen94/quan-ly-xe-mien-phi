@@ -132,6 +132,16 @@ body {
   background-position: center;
 }
 
+.app-version {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.02em;
+}
+
 .connection-status {
   font-size: 12px;
   font-weight: 600;
