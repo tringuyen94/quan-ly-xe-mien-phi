@@ -120,6 +120,25 @@ ipcMain.handle("get-vehicles", async (_event, tableName, owner) => {
   return result.recordset;
 });
 
+ipcMain.handle("search-vehicles", async (_event, tableName, searchQuery) => {
+  validateTable(tableName);
+  const cfg = TABLE_CONFIG[tableName];
+  const db = await getPool();
+  const cols = cfg.displayCols.includes(cfg.ownerCol)
+    ? cfg.displayCols
+    : [cfg.ownerCol, ...cfg.displayCols];
+  const result = await db
+    .request()
+    .input("q", sql.NVarChar, `%${searchQuery}%`)
+    .query(
+      `SELECT ${cols.map((c) => `[${c}]`).join(", ")}
+       FROM [${tableName}]
+       WHERE [${cfg.idCol}] LIKE @q
+       ORDER BY [${cfg.idCol}]`
+    );
+  return result.recordset;
+});
+
 ipcMain.handle("update-expiry", async (_event, tableName, ids, newValue) => {
   try {
     validateTable(tableName);

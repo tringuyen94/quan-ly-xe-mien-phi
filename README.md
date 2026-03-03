@@ -1,9 +1,9 @@
 ## Tính năng
 
-- Quản lý 3 loại bảng: **Xe Miễn Phí**, **Vé Tháng Nhập Chợ**, **Vé Tháng Lưu Đậu**
-- Tìm kiếm chủ xe (hỗ trợ tìm không dấu)
-- Xem danh sách xe theo từng chủ xe
-- Cập nhật hàng loạt ngày hết hạn / tháng-năm
+- **Tab sidebar:** Chủ xe | Số xe
+  - **Chủ xe:** Tìm kiếm chủ xe (hỗ trợ tìm không dấu), xem danh sách xe theo từng chủ xe
+  - **Số xe:** Tìm số xe trên toàn bảng tblXeMienPhi (không cần chọn chủ xe)
+- Cập nhật hàng loạt ngày hết hạn theo tháng-năm (trả về đúng ngày cuối tháng)
 - Cập nhật trạng thái xe miễn phí
 - Hiển thị trạng thái kết nối SQL Server realtime
 
@@ -76,7 +76,7 @@ quan-ly-xe/
 └── renderer/
     ├── index.html     # Giao diện chính
     ├── styles.css     # Stylesheet
-    └── app.js         # Logic UI (tabs, search, table, update)
+    └── app.js         # Logic UI (sidebar tabs, owner/vehicle search, table, update)
 ```
 
 ## Công nghệ

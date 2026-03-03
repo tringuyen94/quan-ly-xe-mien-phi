@@ -1,6 +1,7 @@
 let tableConfig = {};
 let currentTable = "tblXeMienPhi";
 let currentOwner = null;
+let currentSidebarMode = "chuxe"; // "chuxe" | "soxe"
 let vehicles = [];
 let selectedIds = new Set();
 
@@ -59,7 +60,9 @@ async function init() {
 
   setupThemeToggle();
   setupTabs();
+  setupSidebarTabs();
   setupSearch();
+  setupVehicleSearch();
   setupActions();
   loadOwners();
 }
@@ -73,9 +76,47 @@ function setupTabs() {
       tab.classList.add("active");
       currentTable = tab.dataset.table;
       currentOwner = null;
+      currentSidebarMode = "chuxe";
       selectedIds.clear();
       clearTable();
+      $("#sidebarContentChuxe").style.display = "flex";
+      $("#sidebarContentSoxe").style.display = "none";
+      $$(".sidebar-tab").forEach((t) => t.classList.remove("active"));
+      $('.sidebar-tab[data-mode="chuxe"]').classList.add("active");
+      $("#vehicleSearchSidebar").value = "";
       loadOwners();
+    });
+  });
+}
+
+// ---- Sidebar tabs (Chủ xe / Số xe) ----
+
+function setupSidebarTabs() {
+  $$(".sidebar-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const mode = tab.dataset.mode;
+      if (mode === currentSidebarMode) return;
+      currentSidebarMode = mode;
+      $$(".sidebar-tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      if (mode === "chuxe") {
+        $("#sidebarContentChuxe").style.display = "flex";
+        $("#sidebarContentSoxe").style.display = "none";
+        $("#vehicleSearchSidebar").value = "";
+        currentOwner = null;
+        selectedIds.clear();
+        clearTable();
+        loadOwners();
+      } else {
+        $("#sidebarContentChuxe").style.display = "none";
+        $("#sidebarContentSoxe").style.display = "flex";
+        currentOwner = null;
+        selectedIds.clear();
+        clearTable();
+        const q = $("#vehicleSearchSidebar").value.trim();
+        if (q) onVehicleSearchChange(q);
+      }
     });
   });
 }
@@ -94,6 +135,34 @@ function setupSearch() {
       li.style.display = match ? "" : "none";
     });
   });
+}
+
+// ---- Vehicle search (full table) ----
+
+let vehicleSearchDebounce = null;
+
+function setupVehicleSearch() {
+  const handleSearch = (e) => {
+    const query = e.target.value.trim();
+    clearTimeout(vehicleSearchDebounce);
+    vehicleSearchDebounce = setTimeout(() => {
+      onVehicleSearchChange(query);
+    }, 300);
+  };
+  $("#vehicleSearch")?.addEventListener("input", handleSearch);
+  $("#vehicleSearchSidebar")?.addEventListener("input", handleSearch);
+}
+
+async function onVehicleSearchChange(query) {
+  if (query) {
+    await loadVehiclesBySearch(query);
+  } else {
+    if (currentOwner) {
+      await loadVehicles();
+    } else {
+      clearTable();
+    }
+  }
 }
 
 // ---- Load owners ----
@@ -123,6 +192,7 @@ async function loadOwners() {
     if (owners.length === 0) {
       list.innerHTML =
         '<li style="color:var(--text-tertiary);cursor:default;justify-content:center">Không có dữ liệu</li>';
+      $("#vehicleSearch").value = "";
       return;
     }
 
@@ -136,6 +206,7 @@ async function loadOwners() {
       li.addEventListener("click", () => selectOwner(owner, li));
       list.appendChild(li);
     });
+    $("#vehicleSearch").value = "";
   } catch (err) {
     const list = $("#ownerList");
     list.innerHTML =
@@ -156,6 +227,8 @@ async function selectOwner(owner, li) {
   $("#emptyState").classList.add("hidden");
   $("#actionsBar").style.display = "flex";
   $("#btnSelectAll").style.display = "";
+  $("#vehicleSearch").style.display = "";
+  $("#vehicleSearch").value = "";
 
   renderUpdateGroup();
   await loadVehicles();
@@ -202,6 +275,78 @@ function renderUpdateGroup() {
 
 // ---- Load vehicles ----
 
+async function loadVehiclesBySearch(query) {
+  const tbody = $("#tableBody");
+  const thead = $("#tableHead");
+  tbody.innerHTML = "";
+  const cfg = tableConfig[currentTable];
+  const displayCols = cfg.displayCols.includes(cfg.ownerCol)
+    ? cfg.displayCols
+    : [cfg.ownerCol, ...cfg.displayCols];
+
+  try {
+    vehicles = await window.api.searchVehicles(currentTable, query);
+    $("#emptyState").classList.add("hidden");
+    $("#actionsBar").style.display = "flex";
+    $("#btnSelectAll").style.display = "";
+    $("#vehicleSearch").style.display = currentSidebarMode === "chuxe" && currentOwner ? "" : "none";
+    renderUpdateGroup();
+
+    thead.innerHTML = `<tr>
+      <th><input type="checkbox" id="checkAll" /></th>
+      ${displayCols.map((col) => `<th>${formatColName(col)}</th>`).join("")}
+    </tr>`;
+
+    $("#checkAll").addEventListener("change", (e) => {
+      const checked = e.target.checked;
+      $$('#tableBody input[type="checkbox"]').forEach((cb) => {
+        const tr = cb.closest("tr");
+        if (!tr?.dataset.id || tr.style.display === "none") return;
+        cb.checked = checked;
+        toggleSelection(cb.dataset.id, checked);
+        tr.classList.toggle("selected", checked);
+      });
+      updateSelectAllBtn();
+    });
+
+    if (vehicles.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="99" style="text-align:center;color:var(--text-tertiary);padding:40px">Không tìm thấy xe nào</td></tr>';
+      $("#contentTitle").textContent = `Tìm số xe: "${query}"`;
+      return;
+    }
+
+    $("#contentTitle").textContent = `Tìm số xe: "${query}" (${vehicles.length} kết quả)`;
+    renderVehicleRows(tbody, vehicles, cfg, displayCols);
+    updateSelectAllBtn();
+    updateBtnState();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="99" style="color:var(--danger);padding:20px">Lỗi: ${err.message}</td></tr>`;
+  }
+}
+
+function renderVehicleRows(tbody, data, cfg, displayCols) {
+  data.forEach((v) => {
+    const idVal = v[cfg.idCol];
+    const tr = document.createElement("tr");
+    tr.dataset.searchValue = String(idVal || "");
+    tr.dataset.id = String(idVal);
+
+    tr.innerHTML = `
+      <td><input type="checkbox" data-id="${idVal}" /></td>
+      ${displayCols.map((col) => `<td>${formatValue(col, v[col])}</td>`).join("")}
+    `;
+
+    const cb = tr.querySelector('input[type="checkbox"]');
+    cb.addEventListener("change", () => {
+      toggleSelection(String(idVal), cb.checked);
+      tr.classList.toggle("selected", cb.checked);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
 async function loadVehicles() {
   const tbody = $("#tableBody");
   const thead = $("#tableHead");
@@ -218,10 +363,13 @@ async function loadVehicles() {
 
     $("#checkAll").addEventListener("change", (e) => {
       const checked = e.target.checked;
+      const visibleIds = getVisibleVehicleIds();
       $$('#tableBody input[type="checkbox"]').forEach((cb) => {
+        const tr = cb.closest("tr");
+        if (!tr?.dataset.id || tr.style.display === "none") return;
         cb.checked = checked;
         toggleSelection(cb.dataset.id, checked);
-        cb.closest("tr").classList.toggle("selected", checked);
+        tr.classList.toggle("selected", checked);
       });
       updateSelectAllBtn();
     });
@@ -232,23 +380,7 @@ async function loadVehicles() {
       return;
     }
 
-    vehicles.forEach((v) => {
-      const idVal = v[cfg.idCol];
-      const tr = document.createElement("tr");
-
-      tr.innerHTML = `
-        <td><input type="checkbox" data-id="${idVal}" /></td>
-        ${cfg.displayCols.map((col) => `<td>${formatValue(col, v[col])}</td>`).join("")}
-      `;
-
-      const cb = tr.querySelector('input[type="checkbox"]');
-      cb.addEventListener("change", () => {
-        toggleSelection(String(idVal), cb.checked);
-        tr.classList.toggle("selected", cb.checked);
-      });
-
-      tbody.appendChild(tr);
-    });
+    renderVehicleRows(tbody, vehicles, cfg, cfg.displayCols);
 
     updateSelectAllBtn();
     updateBtnState();
@@ -261,6 +393,7 @@ function toggleSelection(id, checked) {
   if (checked) selectedIds.add(String(id));
   else selectedIds.delete(String(id));
   updateBtnState();
+  updateSelectAllBtn();
 }
 
 function updateBtnState() {
@@ -278,11 +411,20 @@ function updateBtnState() {
   btn.textContent = label;
 }
 
+function getVisibleVehicleIds() {
+  return [...$$("#tableBody tr")]
+    .filter((tr) => tr.dataset.id && tr.style.display !== "none")
+    .map((tr) => tr.dataset.id);
+}
+
 function updateSelectAllBtn() {
   const btn = $("#btnSelectAll");
-  btn.textContent = selectedIds.size === vehicles.length && vehicles.length > 0
-    ? "Bỏ chọn tất cả"
-    : "Chọn tất cả";
+  const checkAll = $("#checkAll");
+  const visibleIds = getVisibleVehicleIds();
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  btn.textContent = allVisibleSelected ? "Bỏ chọn tất cả" : "Chọn tất cả";
+  if (checkAll) checkAll.checked = allVisibleSelected;
 }
 
 // ---- Actions ----
@@ -290,12 +432,17 @@ function updateSelectAllBtn() {
 function setupActions() {
   $("#btnUpdate").addEventListener("click", doUpdate);
   $("#btnSelectAll").addEventListener("click", () => {
-    const allSelected = selectedIds.size === vehicles.length && vehicles.length > 0;
+    const visibleIds = getVisibleVehicleIds();
+    const allVisibleSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
 
     $$('#tableBody input[type="checkbox"]').forEach((cb) => {
-      cb.checked = !allSelected;
-      toggleSelection(cb.dataset.id, !allSelected);
-      cb.closest("tr").classList.toggle("selected", !allSelected);
+      const tr = cb.closest("tr");
+      if (!tr?.dataset.id || tr.style.display === "none") return;
+      const newChecked = !allVisibleSelected;
+      cb.checked = newChecked;
+      toggleSelection(cb.dataset.id, newChecked);
+      tr.classList.toggle("selected", newChecked);
     });
 
     const checkAll = $("#checkAll");
@@ -317,7 +464,10 @@ async function doUpdate() {
   }
 
   const endOfMonth = new Date(year, month, 0);
-  const newValue = endOfMonth.toISOString().split("T")[0];
+  const y = endOfMonth.getFullYear();
+  const m = String(endOfMonth.getMonth() + 1).padStart(2, "0");
+  const d = String(endOfMonth.getDate()).padStart(2, "0");
+  const newValue = `${y}-${m}-${d}`;
 
   const ids = Array.from(selectedIds);
   const btn = $("#btnUpdate");
@@ -328,7 +478,9 @@ async function doUpdate() {
     const result = await window.api.updateExpiry(currentTable, ids, newValue);
     showToast(`Đã cập nhật ${result.affected} bản ghi thành công!`, "success");
     selectedIds.clear();
-    await loadVehicles();
+    const q = (currentSidebarMode === "soxe" ? $("#vehicleSearchSidebar") : $("#vehicleSearch"))?.value?.trim();
+    if (q) await loadVehiclesBySearch(q);
+    else await loadVehicles();
   } catch (err) {
     showToast("Lỗi cập nhật: " + err.message, "error");
   } finally {
@@ -352,7 +504,9 @@ async function doUpdateStatus() {
     const result = await window.api.updateStatus(currentTable, ids, newStatus);
     showToast(`Đã cập nhật trạng thái ${result.affected} xe thành công!`, "success");
     selectedIds.clear();
-    await loadVehicles();
+    const q = (currentSidebarMode === "soxe" ? $("#vehicleSearchSidebar") : $("#vehicleSearch"))?.value?.trim();
+    if (q) await loadVehiclesBySearch(q);
+    else await loadVehicles();
   } catch (err) {
     showToast("Lỗi cập nhật trạng thái: " + err.message, "error");
   } finally {
@@ -370,7 +524,7 @@ function formatColName(col) {
     trangThai: "Trạng thái",
     ngayHieuLuc: "Ngày hiệu lực",
     ngayHetHan: "Ngày hết hạn",
-    ghiChu: "Ghi chú",
+    ghiChu: "Chủ xe",
     maKhachHang: "Mã KH",
     thang: "Tháng",
     nam: "Năm",
@@ -423,6 +577,11 @@ function clearTable() {
   $("#emptyState").classList.remove("hidden");
   $("#actionsBar").style.display = "none";
   $("#btnSelectAll").style.display = "none";
+  const vehicleSearch = $("#vehicleSearch");
+  if (vehicleSearch) {
+    vehicleSearch.style.display = "none";
+    vehicleSearch.value = "";
+  }
   $("#contentTitle").textContent = "Chọn chủ xe để xem danh sách";
 }
 
