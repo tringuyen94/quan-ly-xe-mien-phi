@@ -528,17 +528,17 @@ ipcMain.handle("update-download", () => {
 });
 
 ipcMain.handle("update-install", async () => {
-  // Đóng pool + destroy windows trước khi quitAndInstall để Windows
-  // release file handle, tránh "Vui lòng đóng ứng dụng theo cách thủ công"
   if (pool) {
-    try { await pool.close(); } catch (_) {}
+    await Promise.race([
+      pool.close().catch(() => {}),
+      new Promise((r) => setTimeout(r, 2000)),
+    ]);
     pool = null;
   }
   BrowserWindow.getAllWindows().forEach((w) => {
     try { w.removeAllListeners("close"); w.destroy(); } catch (_) {}
   });
-  // Silent install (true) + force run after (true) — installer không hiện UI,
-  // dùng Windows RestartManager để replace exe an toàn
+  try { app.releaseSingleInstanceLock(); } catch (_) {}
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
 });
 
@@ -569,7 +569,10 @@ if (!gotLock) {
 
   app.on("window-all-closed", async () => {
     if (pool) {
-      await pool.close();
+      await Promise.race([
+        pool.close().catch(() => {}),
+        new Promise((r) => setTimeout(r, 2000)),
+      ]);
       pool = null;
     }
     app.quit();
