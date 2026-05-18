@@ -528,13 +528,18 @@ ipcMain.handle("update-download", () => {
 });
 
 ipcMain.handle("update-install", async () => {
-  // Đóng pool trước khi thoát để app thoát nhanh, tránh lỗi
-  // "Vui lòng đóng ứng dụng theo cách thủ công" trên Windows
+  // Đóng pool + destroy windows trước khi quitAndInstall để Windows
+  // release file handle, tránh "Vui lòng đóng ứng dụng theo cách thủ công"
   if (pool) {
-    await pool.close();
+    try { await pool.close(); } catch (_) {}
     pool = null;
   }
-  autoUpdater.quitAndInstall(false, true);
+  BrowserWindow.getAllWindows().forEach((w) => {
+    try { w.removeAllListeners("close"); w.destroy(); } catch (_) {}
+  });
+  // Silent install (true) + force run after (true) — installer không hiện UI,
+  // dùng Windows RestartManager để replace exe an toàn
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
 });
 
 ipcMain.handle("update-check", () => {
