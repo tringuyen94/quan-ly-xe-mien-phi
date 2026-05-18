@@ -1,3 +1,10 @@
 node_modules/
 dist/
 .env
+
+# Local DB backups and exports (chứa dữ liệu nội bộ, không push)
+backups/
+khach-hang.json
+xe-mien-phi.json
+suspect-plates-*.json
+suspect-plates-*.xlsx

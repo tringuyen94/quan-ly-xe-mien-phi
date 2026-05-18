@@ -11,6 +11,11 @@
   <header class="header">
     <h1>Quản Lý Xe — Chợ Thủ Đức</h1>
     <div class="header-right">
+      <div class="header-actions">
+        <button class="header-btn" id="btnAddCustomer">+ Khách hàng</button>
+        <button class="header-btn" id="btnAddVehicle">+ Thêm xe</button>
+        <button class="header-btn" id="btnManageCustomers">Quản lý KH</button>
+      </div>
       <span class="app-version" id="appVersion"></span>
       <div class="connection-status" id="connStatus">Đang kết nối...</div>
       <button class="theme-toggle" id="themeToggle" title="Chuyển giao diện sáng/tối">
@@ -108,6 +113,21 @@
 
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>
+
+  <!-- Modal -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle"></h3>
+        <button class="modal-close" id="modalClose" type="button" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="modalCancel" type="button">Hủy</button>
+        <button class="btn btn-primary" id="modalSubmit" type="button">Lưu</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

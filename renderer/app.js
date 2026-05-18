@@ -64,6 +64,8 @@ async function init() {
   setupSearch();
   setupVehicleSearch();
   setupActions();
+  setupModal();
+  setupAddButtons();
   loadOwners();
 }
 
@@ -295,6 +297,7 @@ async function loadVehiclesBySearch(query) {
     thead.innerHTML = `<tr>
       <th><input type="checkbox" id="checkAll" /></th>
       ${displayCols.map((col) => `<th>${formatColName(col)}</th>`).join("")}
+      <th class="actions-th">Sửa/Xóa</th>
     </tr>`;
 
     $("#checkAll").addEventListener("change", (e) => {
@@ -335,12 +338,25 @@ function renderVehicleRows(tbody, data, cfg, displayCols) {
     tr.innerHTML = `
       <td><input type="checkbox" data-id="${idVal}" /></td>
       ${displayCols.map((col) => `<td>${formatValue(col, v[col])}</td>`).join("")}
+      <td class="actions-cell">
+        <button class="row-action edit" title="Sửa" data-action="edit" data-id="${escapeAttr(idVal)}">✎</button>
+        <button class="row-action delete" title="Xóa" data-action="delete" data-id="${escapeAttr(idVal)}">🗑</button>
+      </td>
     `;
 
     const cb = tr.querySelector('input[type="checkbox"]');
     cb.addEventListener("change", () => {
       toggleSelection(String(idVal), cb.checked);
       tr.classList.toggle("selected", cb.checked);
+    });
+
+    tr.querySelector('button[data-action="edit"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEditVehicleModal(v);
+    });
+    tr.querySelector('button[data-action="delete"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      confirmDeleteVehicle(v);
     });
 
     tbody.appendChild(tr);
@@ -359,6 +375,7 @@ async function loadVehicles() {
     thead.innerHTML = `<tr>
       <th><input type="checkbox" id="checkAll" /></th>
       ${cfg.displayCols.map((col) => `<th>${formatColName(col)}</th>`).join("")}
+      <th class="actions-th">Sửa/Xóa</th>
     </tr>`;
 
     $("#checkAll").addEventListener("change", (e) => {
@@ -594,6 +611,677 @@ function showToast(msg, type = "success") {
   }, 3000);
 }
 
+// ---- Modal ----
+
+let modalSubmitHandler = null;
+
+function setupModal() {
+  $("#modalClose").addEventListener("click", closeModal);
+  $("#modalCancel").addEventListener("click", closeModal);
+  $("#modalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "modalOverlay") closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("#modalOverlay").classList.contains("hidden")) {
+      closeModal();
+    }
+  });
+  $("#modalSubmit").addEventListener("click", () => {
+    if (modalSubmitHandler) modalSubmitHandler();
+  });
+}
+
+function openModal(title, bodyHTML, onSubmit, submitLabel = "Lưu", opts = {}) {
+  $("#modalTitle").textContent = title;
+  $("#modalBody").innerHTML = bodyHTML;
+  $("#modalSubmit").textContent = submitLabel;
+  $("#modalSubmit").disabled = false;
+  $("#modalSubmit").style.display = opts.hideSubmit ? "none" : "";
+  $("#modal").classList.toggle("modal-wide", !!opts.wide);
+  modalSubmitHandler = onSubmit;
+  $("#modalOverlay").classList.remove("hidden");
+  const firstInput = $("#modalBody input, #modalBody select, #modalBody textarea");
+  if (firstInput) setTimeout(() => firstInput.focus(), 50);
+}
+
+function closeModal() {
+  $("#modalOverlay").classList.add("hidden");
+  $("#modalBody").innerHTML = "";
+  $("#modal").classList.remove("modal-wide");
+  $("#modalSubmit").style.display = "";
+  modalSubmitHandler = null;
+}
+
+function setSubmitLoading(loading, label = "Lưu") {
+  const btn = $("#modalSubmit");
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="loading"></span>Đang lưu...' : label;
+}
+
+// ---- Add Customer / Add Vehicle ----
+
+function setupAddButtons() {
+  $("#btnAddCustomer")?.addEventListener("click", openAddCustomerModal);
+  $("#btnAddVehicle")?.addEventListener("click", () => openAddVehicleModal());
+  $("#btnManageCustomers")?.addEventListener("click", openManageCustomersModal);
+}
+
+// ---- Manage / Edit / Delete Customer ----
+
+let manageSearchDebounce = null;
+
+async function openManageCustomersModal() {
+  const body = `
+    <div class="form-group" style="margin-bottom:12px">
+      <input type="text" id="kh_listSearch" class="combo-search-input" placeholder="Tìm theo mã, họ, tên, cửa hàng, CMND, địa chỉ..." autocomplete="off" />
+    </div>
+    <div id="kh_listBox" style="max-height:60vh;overflow-y:auto"></div>
+  `;
+  openModal("Quản lý khách hàng", body, null, "", { wide: true, hideSubmit: true });
+  await renderCustomerList("");
+
+  $("#kh_listSearch").addEventListener("input", (e) => {
+    const q = e.target.value;
+    clearTimeout(manageSearchDebounce);
+    manageSearchDebounce = setTimeout(() => renderCustomerList(q), 250);
+  });
+}
+
+async function renderCustomerList(q) {
+  const box = $("#kh_listBox");
+  box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-tertiary)">Đang tải...</div>';
+  try {
+    const list = await window.api.listCustomers(q);
+    if (!list.length) {
+      box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-tertiary)">Không tìm thấy KH</div>';
+      return;
+    }
+    const rows = list
+      .map((c) => {
+        const name = [c.ho, c.ten].filter(Boolean).join(" ") || "(chưa có tên)";
+        return `
+        <tr data-id="${escapeAttr(c.maKhachHang)}">
+          <td>${escapeHTML(c.maKhachHang)}</td>
+          <td>${escapeHTML(name)}</td>
+          <td>${escapeHTML(c.tenCuaHang || "")}</td>
+          <td>${escapeHTML(c.diaChi || "")}</td>
+          <td class="actions-cell">
+            <button class="row-action edit" data-action="kh-edit" title="Sửa">✎</button>
+            <button class="row-action delete" data-action="kh-delete" title="Xóa">🗑</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+    box.innerHTML = `
+      <table class="kh-list-table">
+        <thead><tr><th>Mã</th><th>Họ tên</th><th>Cửa hàng</th><th>Địa chỉ</th><th>Sửa/Xóa</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    box.querySelectorAll('button[data-action="kh-edit"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.closest("tr").dataset.id;
+        const c = list.find((x) => String(x.maKhachHang) === String(id));
+        if (c) openEditCustomerModal(c);
+      });
+    });
+    box.querySelectorAll('button[data-action="kh-delete"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.closest("tr").dataset.id;
+        const c = list.find((x) => String(x.maKhachHang) === String(id));
+        if (c) confirmDeleteCustomer(c, q);
+      });
+    });
+  } catch (err) {
+    box.innerHTML = `<div style="padding:20px;color:var(--danger)">Lỗi: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function openEditCustomerModal(c) {
+  const body = `
+    <div class="form-group">
+      <label>Mã khách hàng</label>
+      <input type="text" id="kh_maKhachHang" readonly value="${escapeAttr(c.maKhachHang)}" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Họ <span class="required">*</span></label>
+        <input type="text" id="kh_ho" value="${escapeAttr(c.ho || "")}" />
+      </div>
+      <div class="form-group">
+        <label>Tên <span class="required">*</span></label>
+        <input type="text" id="kh_ten" value="${escapeAttr(c.ten || "")}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Tên cửa hàng / ô vựa <span class="required">*</span></label>
+      <input type="text" id="kh_tenCuaHang" value="${escapeAttr(c.tenCuaHang || "")}" />
+    </div>
+    <div class="form-group">
+      <label>CMND / CCCD</label>
+      <input type="text" id="kh_cmnd" value="${escapeAttr(c.cmnd || "")}" />
+    </div>
+    <div class="form-group">
+      <label>Địa chỉ</label>
+      <input type="text" id="kh_diaChi" value="${escapeAttr(c.diaChi || "")}" />
+    </div>
+    <div class="form-group">
+      <label>Ghi chú</label>
+      <textarea id="kh_ghiChu">${escapeHTML(c.ghiChu || "")}</textarea>
+    </div>
+  `;
+  openModal(`Sửa KH #${c.maKhachHang}`, body, async () => {
+    const data = {
+      maKhachHang: c.maKhachHang,
+      ho: $("#kh_ho").value,
+      ten: $("#kh_ten").value,
+      tenCuaHang: $("#kh_tenCuaHang").value,
+      cmnd: $("#kh_cmnd").value,
+      diaChi: $("#kh_diaChi").value,
+      ghiChu: $("#kh_ghiChu").value,
+    };
+    if (!data.ho.trim()) return showToast("Vui lòng nhập Họ", "error");
+    if (!data.ten.trim()) return showToast("Vui lòng nhập Tên", "error");
+    if (!data.tenCuaHang.trim()) return showToast("Vui lòng nhập Tên cửa hàng", "error");
+
+    setSubmitLoading(true);
+    try {
+      const r = await window.api.updateCustomer(data);
+      if (r.success) {
+        showToast(`Đã cập nhật KH #${c.maKhachHang}`, "success");
+        closeModal();
+      } else {
+        showToast("Lỗi: " + r.message, "error");
+        setSubmitLoading(false);
+      }
+    } catch (err) {
+      showToast("Lỗi: " + err.message, "error");
+      setSubmitLoading(false);
+    }
+  });
+}
+
+async function confirmDeleteCustomer(c, refreshQuery) {
+  const name = [c.ho, c.ten].filter(Boolean).join(" ") || c.tenCuaHang || `#${c.maKhachHang}`;
+  if (!confirm(`Xóa khách hàng #${c.maKhachHang} — ${name}?\n\nNếu KH còn xe, xóa sẽ bị từ chối.`)) return;
+  try {
+    const r = await window.api.deleteCustomer(c.maKhachHang);
+    if (r.success) {
+      showToast(`Đã xóa KH #${c.maKhachHang}`, "success");
+      await renderCustomerList(refreshQuery || "");
+    } else {
+      showToast("Lỗi: " + r.message, "error");
+    }
+  } catch (err) {
+    showToast("Lỗi: " + err.message, "error");
+  }
+}
+
+async function openAddCustomerModal() {
+  const body = `
+    <div class="form-group">
+      <label>Mã khách hàng (tự sinh)</label>
+      <input type="text" id="kh_maKhachHang" readonly value="Đang tải..." />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Họ <span class="required">*</span></label>
+        <input type="text" id="kh_ho" placeholder="VD: Nguyễn" />
+      </div>
+      <div class="form-group">
+        <label>Tên <span class="required">*</span></label>
+        <input type="text" id="kh_ten" placeholder="VD: Văn A" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Tên cửa hàng / ô vựa <span class="required">*</span></label>
+      <input type="text" id="kh_tenCuaHang" placeholder="VD: Cty TNHH ABC" />
+    </div>
+    <div class="form-group">
+      <label>CMND / CCCD</label>
+      <input type="text" id="kh_cmnd" placeholder="VD: 079123456789" />
+    </div>
+    <div class="form-group">
+      <label>Địa chỉ</label>
+      <input type="text" id="kh_diaChi" placeholder="VD: 141 QL1A, P.Tam Bình, TP.Thủ Đức" />
+    </div>
+    <div class="form-group">
+      <label>Ghi chú</label>
+      <textarea id="kh_ghiChu" placeholder="Số điện thoại, ghi chú khác..."></textarea>
+    </div>
+  `;
+  openModal("Thêm khách hàng mới", body, async () => {
+    const data = {
+      ho: $("#kh_ho").value,
+      ten: $("#kh_ten").value,
+      cmnd: $("#kh_cmnd").value,
+      tenCuaHang: $("#kh_tenCuaHang").value,
+      diaChi: $("#kh_diaChi").value,
+      ghiChu: $("#kh_ghiChu").value,
+    };
+    if (!data.ho.trim()) {
+      showToast("Vui lòng nhập Họ", "error");
+      return;
+    }
+    if (!data.ten.trim()) {
+      showToast("Vui lòng nhập Tên", "error");
+      return;
+    }
+    if (!data.tenCuaHang.trim()) {
+      showToast("Vui lòng nhập Tên cửa hàng / ô vựa", "error");
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      const result = await window.api.insertCustomer(data);
+      if (result.success) {
+        showToast(`Đã thêm khách hàng #${result.maKhachHang}`, "success");
+        closeModal();
+      } else {
+        showToast("Lỗi: " + result.message, "error");
+        setSubmitLoading(false);
+      }
+    } catch (err) {
+      showToast("Lỗi: " + err.message, "error");
+      setSubmitLoading(false);
+    }
+  });
+
+  try {
+    const { nextId } = await window.api.getNextCustomerId();
+    $("#kh_maKhachHang").value = nextId != null ? String(nextId) : "(không xác định)";
+  } catch {
+    $("#kh_maKhachHang").value = "(không xác định)";
+  }
+}
+
+function endOfMonthISO(date = new Date()) {
+  const eom = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  const y = eom.getFullYear();
+  const m = String(eom.getMonth() + 1).padStart(2, "0");
+  const d = String(eom.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function startOfMonthISO(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
+
+let selectedCustomer = null;
+let customerSearchDebounce = null;
+
+function openAddVehicleModal() {
+  selectedCustomer = null;
+  const defaultExpiry = endOfMonthISO();
+  const statusOptions = Object.entries(TRANG_THAI_MAP)
+    .map(([val, label]) => `<option value="${val}" ${val === "1" ? "selected" : ""}>${label}</option>`)
+    .join("");
+
+  const body = `
+    <div class="form-group">
+      <label>Khách hàng <span class="required">*</span></label>
+      <div class="combo-search">
+        <input type="text" id="xe_khSearch" class="combo-search-input" placeholder="Gõ tên, mã KH hoặc cửa hàng..." autocomplete="off" />
+        <div class="combo-search-results hidden" id="xe_khResults"></div>
+      </div>
+      <div id="xe_khSelected"></div>
+    </div>
+    <div class="form-group">
+      <label>Biển số xe — mỗi dòng 1 biển <span class="required">*</span></label>
+      <textarea id="xe_bienSo" rows="5" placeholder="VD:&#10;51A12345&#10;51B98765&#10;51C11223" autocomplete="off" style="font-family:monospace;text-transform:uppercase"></textarea>
+      <div id="xe_bienSoCount" style="font-size:12px;color:var(--text-tertiary);margin-top:4px"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Ngày hiệu lực</label>
+        <input type="date" id="xe_ngayHieuLuc" />
+      </div>
+      <div class="form-group">
+        <label>Ngày hết hạn <span class="required">*</span></label>
+        <input type="date" id="xe_ngayHetHan" value="${defaultExpiry}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Trạng thái <span class="required">*</span></label>
+      <select id="xe_trangThai">${statusOptions}</select>
+    </div>
+    <div class="form-group">
+      <label>Chủ xe / ghi chú (hiển thị ở sidebar) <span class="required">*</span></label>
+      <input type="text" id="xe_ghiChu" placeholder="Tự fill từ tên cửa hàng khi chọn KH, có thể sửa" />
+    </div>
+  `;
+
+  openModal("Thêm xe mới", body, async () => {
+    if (!selectedCustomer) {
+      showToast("Vui lòng chọn khách hàng", "error");
+      return;
+    }
+    const plates = parsePlates($("#xe_bienSo").value);
+    if (plates.length === 0) {
+      showToast("Vui lòng nhập ít nhất 1 biển số", "error");
+      return;
+    }
+    const ngayHetHan = $("#xe_ngayHetHan").value;
+    if (!ngayHetHan) {
+      showToast("Vui lòng chọn ngày hết hạn", "error");
+      return;
+    }
+    const ghiChuVal = $("#xe_ghiChu").value.trim();
+    if (!ghiChuVal) {
+      showToast("Vui lòng nhập 'Chủ xe / ghi chú' (cột group ở sidebar)", "error");
+      return;
+    }
+
+    setSubmitLoading(true);
+    const shared = {
+      tableName: currentTable,
+      maKhachHang: selectedCustomer.maKhachHang,
+      ngayHieuLuc: $("#xe_ngayHieuLuc").value || null,
+      ngayHetHan,
+      ghiChu: ghiChuVal,
+      trangThai: parseInt($("#xe_trangThai").value, 10),
+    };
+
+    const ok = [];
+    const fail = [];
+    for (const bienSo of plates) {
+      try {
+        const r = await window.api.insertVehicle({ ...shared, bienSo });
+        if (r.success) ok.push(bienSo);
+        else fail.push({ bienSo, msg: r.message });
+      } catch (err) {
+        fail.push({ bienSo, msg: err.message });
+      }
+    }
+
+    if (fail.length === 0) {
+      showToast(`Đã thêm ${ok.length} xe thành công`, "success");
+      closeModal();
+      await loadOwners();
+    } else if (ok.length === 0) {
+      showToast(`Lỗi: ${fail.map(f => f.bienSo + ' (' + f.msg + ')').join('; ')}`, "error");
+      setSubmitLoading(false);
+    } else {
+      showToast(`Thêm ${ok.length}/${plates.length} xe. Lỗi: ${fail.map(f => f.bienSo).join(', ')}`, "error");
+      // remove successful plates from textarea so user thấy chỉ cái fail còn lại
+      $("#xe_bienSo").value = fail.map(f => f.bienSo).join("\n");
+      updatePlateCount();
+      setSubmitLoading(false);
+      await loadOwners();
+    }
+  });
+
+  $("#xe_bienSo").addEventListener("input", (e) => {
+    e.target.value = e.target.value.toUpperCase();
+    updatePlateCount();
+  });
+
+  $("#xe_ngayHetHan").value = defaultExpiry;
+  $("#xe_ngayHieuLuc").value = startOfMonthISO();
+
+  setupCustomerCombo();
+  updatePlateCount();
+}
+
+function parsePlates(raw) {
+  return [
+    ...new Set(
+      String(raw || "")
+        .split(/\r?\n|,|;/)
+        .map((s) => s.trim().toUpperCase().replace(/\s+/g, ""))
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function updatePlateCount() {
+  const el = $("#xe_bienSoCount");
+  const textarea = $("#xe_bienSo");
+  if (!el || !textarea) return;
+  const plates = parsePlates(textarea.value);
+  el.textContent = plates.length ? `${plates.length} biển số sẽ được thêm` : "";
+}
+
+function setupCustomerCombo() {
+  const input = $("#xe_khSearch");
+  const results = $("#xe_khResults");
+
+  const renderResults = (list) => {
+    if (!list.length) {
+      results.innerHTML = '<div class="combo-search-empty">Không tìm thấy khách hàng</div>';
+    } else {
+      results.innerHTML = list
+        .map((c) => {
+          const name = [c.ho, c.ten].filter(Boolean).join(" ") || "(chưa có tên)";
+          const store = c.tenCuaHang ? ` — ${c.tenCuaHang}` : "";
+          return `<div class="combo-search-item" data-id="${c.maKhachHang}" data-name="${escapeAttr(name)}" data-store="${escapeAttr(c.tenCuaHang || "")}"><span class="item-id">#${c.maKhachHang}</span>${escapeHTML(name)}${escapeHTML(store)}</div>`;
+        })
+        .join("");
+      results.querySelectorAll(".combo-search-item").forEach((el) => {
+        el.addEventListener("click", () => {
+          selectedCustomer = {
+            maKhachHang: el.dataset.id,
+            name: el.dataset.name,
+            store: el.dataset.store,
+          };
+          renderSelectedCustomer();
+          const ghiChuInput = $("#xe_ghiChu");
+          if (ghiChuInput) {
+            ghiChuInput.value = selectedCustomer.store || selectedCustomer.name || "";
+          }
+          results.classList.add("hidden");
+          input.value = "";
+        });
+      });
+    }
+    results.classList.remove("hidden");
+  };
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    clearTimeout(customerSearchDebounce);
+    if (!q) {
+      results.classList.add("hidden");
+      return;
+    }
+    customerSearchDebounce = setTimeout(async () => {
+      try {
+        const list = await window.api.searchCustomers(q);
+        renderResults(list);
+      } catch (err) {
+        results.innerHTML = `<div class="combo-search-empty">Lỗi: ${escapeHTML(err.message)}</div>`;
+        results.classList.remove("hidden");
+      }
+    }, 300);
+  });
+
+  input.addEventListener("focus", () => {
+    if (input.value.trim()) results.classList.remove("hidden");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".combo-search")) results.classList.add("hidden");
+  });
+}
+
+function renderSelectedCustomer() {
+  const wrap = $("#xe_khSelected");
+  if (!selectedCustomer) {
+    wrap.innerHTML = "";
+    return;
+  }
+  const label = selectedCustomer.name + (selectedCustomer.store ? ` — ${selectedCustomer.store}` : "");
+  wrap.innerHTML = `<span class="selected-chip">KH #${selectedCustomer.maKhachHang}: ${escapeHTML(label)}<button type="button" id="xe_khClear" aria-label="Bỏ chọn">&times;</button></span>`;
+  $("#xe_khClear").addEventListener("click", () => {
+    selectedCustomer = null;
+    renderSelectedCustomer();
+  });
+}
+
+function escapeHTML(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function escapeAttr(s) {
+  return String(s ?? "").replace(/"/g, "&quot;");
+}
+
+function isoDateOnly(val) {
+  if (!val) return "";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+// ---- Edit / Delete Vehicle ----
+
+function openEditVehicleModal(v) {
+  selectedCustomer = null;
+  const cfg = tableConfig[currentTable];
+  const idVal = v[cfg.idCol];
+
+  const statusOptions = Object.entries(TRANG_THAI_MAP)
+    .map(([val, label]) => {
+      const selected = String(v.trangThai) === String(val) ? "selected" : "";
+      return `<option value="${val}" ${selected}>${label}</option>`;
+    })
+    .join("");
+
+  const body = `
+    <div class="form-group">
+      <label>Biển số xe</label>
+      <input type="text" id="xe_bienSo" value="${escapeAttr(idVal)}" readonly />
+    </div>
+    <div class="form-group">
+      <label>Khách hàng <span class="required">*</span></label>
+      <div class="combo-search">
+        <input type="text" id="xe_khSearch" class="combo-search-input" placeholder="Gõ để đổi KH..." autocomplete="off" />
+        <div class="combo-search-results hidden" id="xe_khResults"></div>
+      </div>
+      <div id="xe_khSelected"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Ngày hiệu lực <span class="required">*</span></label>
+        <input type="date" id="xe_ngayHieuLuc" />
+      </div>
+      <div class="form-group">
+        <label>Ngày hết hạn <span class="required">*</span></label>
+        <input type="date" id="xe_ngayHetHan" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Trạng thái <span class="required">*</span></label>
+      <select id="xe_trangThai">${statusOptions}</select>
+    </div>
+    <div class="form-group">
+      <label>Chủ xe / ghi chú (hiển thị ở sidebar) <span class="required">*</span></label>
+      <input type="text" id="xe_ghiChu" value="${escapeAttr(v.ghiChu || "")}" />
+    </div>
+  `;
+
+  openModal(`Sửa xe ${idVal}`, body, async () => {
+    if (!selectedCustomer) {
+      showToast("Vui lòng chọn khách hàng", "error");
+      return;
+    }
+    const ngayHieuLuc = $("#xe_ngayHieuLuc").value;
+    const ngayHetHan = $("#xe_ngayHetHan").value;
+    if (!ngayHieuLuc) {
+      showToast("Vui lòng chọn ngày hiệu lực", "error");
+      return;
+    }
+    if (!ngayHetHan) {
+      showToast("Vui lòng chọn ngày hết hạn", "error");
+      return;
+    }
+    const ghiChuVal = $("#xe_ghiChu").value.trim();
+    if (!ghiChuVal) {
+      showToast("Vui lòng nhập 'Chủ xe / ghi chú'", "error");
+      return;
+    }
+
+    setSubmitLoading(true);
+    try {
+      const r = await window.api.updateVehicle({
+        tableName: currentTable,
+        bienSo: idVal,
+        maKhachHang: selectedCustomer.maKhachHang,
+        ngayHieuLuc,
+        ngayHetHan,
+        ghiChu: ghiChuVal,
+        trangThai: parseInt($("#xe_trangThai").value, 10),
+      });
+      if (r.success) {
+        showToast(`Đã cập nhật xe ${idVal}`, "success");
+        closeModal();
+        await reloadCurrentView();
+      } else {
+        showToast("Lỗi: " + r.message, "error");
+        setSubmitLoading(false);
+      }
+    } catch (err) {
+      showToast("Lỗi: " + err.message, "error");
+      setSubmitLoading(false);
+    }
+  });
+
+  // Pre-fill date inputs
+  $("#xe_ngayHieuLuc").value = isoDateOnly(v.ngayHieuLuc);
+  $("#xe_ngayHetHan").value = isoDateOnly(v.ngayHetHan);
+
+  // Pre-fill selected customer (lookup by maKhachHang for display name)
+  if (v.maKhachHang) {
+    selectedCustomer = {
+      maKhachHang: String(v.maKhachHang),
+      name: "KH #" + v.maKhachHang,
+      store: "",
+    };
+    renderSelectedCustomer();
+    // Async fetch to get full info
+    window.api.searchCustomers(String(v.maKhachHang)).then((list) => {
+      const c = list.find((x) => String(x.maKhachHang) === String(v.maKhachHang));
+      if (c) {
+        const name = [c.ho, c.ten].filter(Boolean).join(" ") || "(chưa có tên)";
+        selectedCustomer = { maKhachHang: String(c.maKhachHang), name, store: c.tenCuaHang || "" };
+        renderSelectedCustomer();
+      }
+    });
+  }
+
+  setupCustomerCombo();
+}
+
+async function confirmDeleteVehicle(v) {
+  const cfg = tableConfig[currentTable];
+  const idVal = v[cfg.idCol];
+  if (!confirm(`Xóa xe ${idVal}?\n\nThao tác không thể hoàn tác.`)) return;
+  try {
+    const r = await window.api.deleteVehicle(currentTable, idVal);
+    if (r.success) {
+      showToast(`Đã xóa xe ${idVal}`, "success");
+      await reloadCurrentView();
+    } else {
+      showToast("Lỗi: " + r.message, "error");
+    }
+  } catch (err) {
+    showToast("Lỗi: " + err.message, "error");
+  }
+}
+
+async function reloadCurrentView() {
+  const q = (currentSidebarMode === "soxe" ? $("#vehicleSearchSidebar") : $("#vehicleSearch"))?.value?.trim();
+  if (q) await loadVehiclesBySearch(q);
+  else if (currentOwner) await loadVehicles();
+  else await loadOwners();
+}
+
 // ---- Auto Update ----
 
 function setupAutoUpdate() {
@@ -644,6 +1332,8 @@ function setupAutoUpdate() {
   });
 
   btnInstall.addEventListener("click", () => {
+    text.textContent = "Đang đóng ứng dụng để cập nhật...";
+    btnInstall.disabled = true;
     window.api.installUpdate();
   });
 
