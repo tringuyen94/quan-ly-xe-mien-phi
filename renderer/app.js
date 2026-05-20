@@ -964,15 +964,17 @@ function openAddVehicleModal() {
       showToast("Vui lòng nhập ít nhất 1 biển số", "error");
       return;
     }
-    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
+    const rawHetHan = $("#xe_ngayHetHan").value;
+    const ngayHetHan = ddmmyyyyToISO(rawHetHan);
     if (!ngayHetHan) {
-      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
+      showToast(`[DEBUG] Ngày hết hạn raw="${rawHetHan}" len=${rawHetHan.length}`, "error");
+      console.log("[DEBUG ngayHetHan]", JSON.stringify(rawHetHan), "len=", rawHetHan.length, "charCodes=", [...rawHetHan].map(c => c.charCodeAt(0)));
       return;
     }
     const ngayHieuLucRaw = $("#xe_ngayHieuLuc").value.trim();
     const ngayHieuLuc = ngayHieuLucRaw ? ddmmyyyyToISO(ngayHieuLucRaw) : null;
     if (ngayHieuLucRaw && !ngayHieuLuc) {
-      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
+      showToast(`[DEBUG] Ngày hiệu lực raw="${ngayHieuLucRaw}"`, "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
@@ -1229,14 +1231,16 @@ function openEditVehicleModal(v) {
       showToast("Vui lòng chọn khách hàng", "error");
       return;
     }
-    const ngayHieuLuc = ddmmyyyyToISO($("#xe_ngayHieuLuc").value);
-    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
+    const rawHL = $("#xe_ngayHieuLuc").value;
+    const rawHH = $("#xe_ngayHetHan").value;
+    const ngayHieuLuc = ddmmyyyyToISO(rawHL);
+    const ngayHetHan = ddmmyyyyToISO(rawHH);
     if (!ngayHieuLuc) {
-      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
+      showToast(`[DEBUG] Sửa - Ngày hiệu lực raw="${rawHL}"`, "error");
       return;
     }
     if (!ngayHetHan) {
-      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
+      showToast(`[DEBUG] Sửa - Ngày hết hạn raw="${rawHH}"`, "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
