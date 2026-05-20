@@ -1,6 +1,6 @@
 {
   "name": "quan-ly-xe",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "App quan ly xe mien phi - Cho Thu Duc",
   "main": "main.js",
   "scripts": {
@@ -81,6 +81,7 @@
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
+      "include": "build/installer.nsh",
       "installerLanguages": [
         "vi"
       ],
