@@ -664,6 +664,31 @@ function setupAddButtons() {
   $("#btnAddCustomer")?.addEventListener("click", openAddCustomerModal);
   $("#btnAddVehicle")?.addEventListener("click", () => openAddVehicleModal());
   $("#btnManageCustomers")?.addEventListener("click", openManageCustomersModal);
+  $("#btnRefresh")?.addEventListener("click", refreshAll);
+}
+
+async function refreshAll() {
+  const btn = $("#btnRefresh");
+  if (btn) btn.disabled = true;
+  const prevOwner = currentOwner;
+  try {
+    await loadOwners();
+    if (prevOwner) {
+      const li = [...$$("#ownerList li")].find((l) => l.dataset.owner === prevOwner);
+      if (li) {
+        li.classList.add("active");
+        currentOwner = prevOwner;
+        await loadVehicles();
+      } else {
+        currentOwner = null;
+      }
+    }
+    showToast("Đã làm mới", "success");
+  } catch (err) {
+    showToast("Lỗi khi làm mới: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ---- Manage / Edit / Delete Customer ----
