@@ -937,11 +937,11 @@ function openAddVehicleModal() {
     <div class="form-row">
       <div class="form-group">
         <label>Ngày hiệu lực</label>
-        <input type="date" id="xe_ngayHieuLuc" />
+        <input type="text" id="xe_ngayHieuLuc" autocomplete="off" />
       </div>
       <div class="form-group">
         <label>Ngày hết hạn <span class="required">*</span></label>
-        <input type="date" id="xe_ngayHetHan" value="${defaultExpiry}" />
+        <input type="text" id="xe_ngayHetHan" autocomplete="off" />
       </div>
     </div>
     <div class="form-group">
@@ -964,9 +964,15 @@ function openAddVehicleModal() {
       showToast("Vui lòng nhập ít nhất 1 biển số", "error");
       return;
     }
-    const ngayHetHan = $("#xe_ngayHetHan").value;
+    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
     if (!ngayHetHan) {
-      showToast("Vui lòng chọn ngày hết hạn", "error");
+      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
+      return;
+    }
+    const ngayHieuLucRaw = $("#xe_ngayHieuLuc").value.trim();
+    const ngayHieuLuc = ngayHieuLucRaw ? ddmmyyyyToISO(ngayHieuLucRaw) : null;
+    if (ngayHieuLucRaw && !ngayHieuLuc) {
+      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
@@ -979,7 +985,7 @@ function openAddVehicleModal() {
     const shared = {
       tableName: currentTable,
       maKhachHang: selectedCustomer.maKhachHang,
-      ngayHieuLuc: $("#xe_ngayHieuLuc").value || null,
+      ngayHieuLuc,
       ngayHetHan,
       ghiChu: ghiChuVal,
       trangThai: parseInt($("#xe_trangThai").value, 10),
@@ -1019,8 +1025,10 @@ function openAddVehicleModal() {
     updatePlateCount();
   });
 
-  $("#xe_ngayHetHan").value = defaultExpiry;
-  $("#xe_ngayHieuLuc").value = startOfMonthISO();
+  $("#xe_ngayHetHan").value = isoToDDMMYYYY(defaultExpiry);
+  $("#xe_ngayHieuLuc").value = isoToDDMMYYYY(startOfMonthISO());
+  attachDateMask($("#xe_ngayHetHan"));
+  attachDateMask($("#xe_ngayHieuLuc"));
 
   setupCustomerCombo();
   updatePlateCount();
@@ -1139,6 +1147,36 @@ function isoDateOnly(val) {
   return `${y}-${m}-${dd}`;
 }
 
+function ddmmyyyyToISO(str) {
+  const m = String(str || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return "";
+  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return "";
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function isoToDDMMYYYY(val) {
+  const iso = isoDateOnly(val);
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function attachDateMask(inputEl) {
+  if (!inputEl) return;
+  inputEl.setAttribute("inputmode", "numeric");
+  inputEl.setAttribute("maxlength", "10");
+  inputEl.setAttribute("placeholder", "dd/mm/yyyy");
+  inputEl.addEventListener("input", (e) => {
+    let v = e.target.value.replace(/\D/g, "").slice(0, 8);
+    if (v.length >= 5) v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+    else if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+    e.target.value = v;
+  });
+}
+
 // ---- Edit / Delete Vehicle ----
 
 function openEditVehicleModal(v) {
@@ -1169,11 +1207,11 @@ function openEditVehicleModal(v) {
     <div class="form-row">
       <div class="form-group">
         <label>Ngày hiệu lực <span class="required">*</span></label>
-        <input type="date" id="xe_ngayHieuLuc" />
+        <input type="text" id="xe_ngayHieuLuc" autocomplete="off" />
       </div>
       <div class="form-group">
         <label>Ngày hết hạn <span class="required">*</span></label>
-        <input type="date" id="xe_ngayHetHan" />
+        <input type="text" id="xe_ngayHetHan" autocomplete="off" />
       </div>
     </div>
     <div class="form-group">
@@ -1191,14 +1229,14 @@ function openEditVehicleModal(v) {
       showToast("Vui lòng chọn khách hàng", "error");
       return;
     }
-    const ngayHieuLuc = $("#xe_ngayHieuLuc").value;
-    const ngayHetHan = $("#xe_ngayHetHan").value;
+    const ngayHieuLuc = ddmmyyyyToISO($("#xe_ngayHieuLuc").value);
+    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
     if (!ngayHieuLuc) {
-      showToast("Vui lòng chọn ngày hiệu lực", "error");
+      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     if (!ngayHetHan) {
-      showToast("Vui lòng chọn ngày hết hạn", "error");
+      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
@@ -1232,9 +1270,10 @@ function openEditVehicleModal(v) {
     }
   });
 
-  // Pre-fill date inputs
-  $("#xe_ngayHieuLuc").value = isoDateOnly(v.ngayHieuLuc);
-  $("#xe_ngayHetHan").value = isoDateOnly(v.ngayHetHan);
+  $("#xe_ngayHieuLuc").value = isoToDDMMYYYY(v.ngayHieuLuc);
+  $("#xe_ngayHetHan").value = isoToDDMMYYYY(v.ngayHetHan);
+  attachDateMask($("#xe_ngayHieuLuc"));
+  attachDateMask($("#xe_ngayHetHan"));
 
   // Pre-fill selected customer (lookup by maKhachHang for display name)
   if (v.maKhachHang) {
