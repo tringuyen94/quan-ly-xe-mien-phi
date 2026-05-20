@@ -964,17 +964,15 @@ function openAddVehicleModal() {
       showToast("Vui lòng nhập ít nhất 1 biển số", "error");
       return;
     }
-    const rawHetHan = $("#xe_ngayHetHan").value;
-    const ngayHetHan = ddmmyyyyToISO(rawHetHan);
+    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
     if (!ngayHetHan) {
-      showToast(`[DEBUG] Ngày hết hạn raw="${rawHetHan}" len=${rawHetHan.length}`, "error");
-      console.log("[DEBUG ngayHetHan]", JSON.stringify(rawHetHan), "len=", rawHetHan.length, "charCodes=", [...rawHetHan].map(c => c.charCodeAt(0)));
+      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     const ngayHieuLucRaw = $("#xe_ngayHieuLuc").value.trim();
     const ngayHieuLuc = ngayHieuLucRaw ? ddmmyyyyToISO(ngayHieuLucRaw) : null;
     if (ngayHieuLucRaw && !ngayHieuLuc) {
-      showToast(`[DEBUG] Ngày hiệu lực raw="${ngayHieuLucRaw}"`, "error");
+      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
@@ -1153,10 +1151,10 @@ function ddmmyyyyToISO(str) {
   const m = String(str || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return "";
   const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
-  const dt = new Date(y, mo - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return "";
-  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  if (mo < 1 || mo > 12 || d < 1 || y < 1900 || y > 2999) return "";
+  const lastDay = new Date(y, mo, 0).getDate();
+  const dayClamped = Math.min(d, lastDay);
+  return `${y}-${String(mo).padStart(2, "0")}-${String(dayClamped).padStart(2, "0")}`;
 }
 
 function isoToDDMMYYYY(val) {
@@ -1231,16 +1229,14 @@ function openEditVehicleModal(v) {
       showToast("Vui lòng chọn khách hàng", "error");
       return;
     }
-    const rawHL = $("#xe_ngayHieuLuc").value;
-    const rawHH = $("#xe_ngayHetHan").value;
-    const ngayHieuLuc = ddmmyyyyToISO(rawHL);
-    const ngayHetHan = ddmmyyyyToISO(rawHH);
+    const ngayHieuLuc = ddmmyyyyToISO($("#xe_ngayHieuLuc").value);
+    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
     if (!ngayHieuLuc) {
-      showToast(`[DEBUG] Sửa - Ngày hiệu lực raw="${rawHL}"`, "error");
+      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     if (!ngayHetHan) {
-      showToast(`[DEBUG] Sửa - Ngày hết hạn raw="${rawHH}"`, "error");
+      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
       return;
     }
     const ghiChuVal = $("#xe_ghiChu").value.trim();
