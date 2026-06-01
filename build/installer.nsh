@@ -49,7 +49,30 @@
 !macroend
 
 !macro customUnInit
-  ; Same aggressive kill before the old uninstaller deletes files —
-  ; this is the hook that fixes "failed to uninstall old application files".
+  ; Same aggressive kill before the old uninstaller deletes files.
   !insertmacro killAppHard
+!macroend
+
+; --- DỨT ĐIỂM fix cho "failed to uninstall old application files" ---
+; electron-builder's NSIS template aborts the upgrade install when the
+; old uninstaller returns a non-zero exit code. The old uninstaller
+; returns non-zero whenever ANY file fails to delete (typical culprits:
+; mssql native .node files, Electron asar, Defender-scanned binaries
+; that briefly hold a handle even after the process is gone).
+;
+; By overriding customRemoveFiles we replace the default RMDir step
+; with a best-effort delete that suppresses errors via ClearErrors,
+; so the uninstaller always returns success. The new installer then
+; overwrites whatever remains (kill macro already ensures no live
+; handles exist by then, so overwrite is safe).
+!macro customRemoveFiles
+  !insertmacro killAppHard
+
+  ClearErrors
+  RMDir /r "$INSTDIR\resources"
+  ClearErrors
+  RMDir /r "$INSTDIR\locales"
+  ClearErrors
+  RMDir /r "$INSTDIR"
+  ClearErrors
 !macroend
