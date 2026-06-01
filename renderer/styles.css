@@ -999,6 +999,16 @@ th input[type="checkbox"] {
   transition: all var(--transition);
   backdrop-filter: blur(4px);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-btn .btn-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
 }
 
 .header-btn:hover {
