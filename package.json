@@ -1,6 +1,6 @@
 {
   "name": "quan-ly-xe",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "App quan ly xe mien phi - Cho Thu Duc",
   "main": "main.js",
   "scripts": {
@@ -77,7 +77,7 @@
       "icon": null
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false,
