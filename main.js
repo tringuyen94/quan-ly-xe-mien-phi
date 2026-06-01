@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const sql = require("mssql");
@@ -73,12 +73,30 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "Quan Ly Xe - Cho Thu Duc",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Sửa",
+        submenu: [
+          { role: "undo", label: "Hoàn tác" },
+          { role: "redo", label: "Làm lại" },
+          { type: "separator" },
+          { role: "cut", label: "Cắt" },
+          { role: "copy", label: "Sao chép" },
+          { role: "paste", label: "Dán" },
+          { role: "selectAll", label: "Chọn tất cả" },
+        ],
+      },
+    ])
+  );
 
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
 

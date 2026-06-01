@@ -4,6 +4,58 @@ let currentOwner = null;
 let currentSidebarMode = "chuxe"; // "chuxe" | "soxe"
 let vehicles = [];
 let selectedIds = new Set();
+let sortState = { col: null, dir: null }; // dir: 'asc' | 'desc'
+
+const SORTABLE_COLS = new Set(["ngayHetHan"]);
+
+function compareForSort(a, b, col) {
+  const va = a?.[col];
+  const vb = b?.[col];
+  if (va == null && vb == null) return 0;
+  if (va == null) return 1;
+  if (vb == null) return -1;
+  if (col === "ngayHetHan" || col === "ngayHieuLuc" || col === "ngayBan") {
+    return new Date(va).getTime() - new Date(vb).getTime();
+  }
+  return String(va).localeCompare(String(vb), "vi");
+}
+
+function applySortIfAny() {
+  if (!sortState.col) return;
+  const sign = sortState.dir === "desc" ? -1 : 1;
+  vehicles.sort((a, b) => sign * compareForSort(a, b, sortState.col));
+}
+
+function sortHeaderHTML(col) {
+  if (!SORTABLE_COLS.has(col)) return formatColName(col);
+  const arrow =
+    sortState.col === col ? (sortState.dir === "desc" ? " ▼" : " ▲") : " ⇅";
+  return `<span class="sort-indicator">${formatColName(col)}${arrow}</span>`;
+}
+
+function attachSortHandlers(tbody, cfg, displayCols) {
+  $$("#tableHead th[data-sort]").forEach((th) => {
+    th.style.cursor = "pointer";
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (sortState.col === col) {
+        sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+      } else {
+        sortState.col = col;
+        sortState.dir = "asc";
+      }
+      applySortIfAny();
+      tbody.innerHTML = "";
+      renderVehicleRows(tbody, vehicles, cfg, displayCols);
+      $$("#tableHead th[data-sort]").forEach((h) => {
+        const c = h.dataset.sort;
+        h.innerHTML = sortHeaderHTML(c);
+      });
+      updateSelectAllBtn();
+      updateBtnState();
+    });
+  });
+}
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -144,15 +196,33 @@ function setupSearch() {
 let vehicleSearchDebounce = null;
 
 function setupVehicleSearch() {
-  const handleSearch = (e) => {
+  $("#vehicleSearch")?.addEventListener("input", (e) => {
+    filterOwnerVehiclesLocal(e.target.value.trim());
+  });
+  $("#vehicleSearchSidebar")?.addEventListener("input", (e) => {
     const query = e.target.value.trim();
     clearTimeout(vehicleSearchDebounce);
     vehicleSearchDebounce = setTimeout(() => {
       onVehicleSearchChange(query);
     }, 300);
-  };
-  $("#vehicleSearch")?.addEventListener("input", handleSearch);
-  $("#vehicleSearchSidebar")?.addEventListener("input", handleSearch);
+  });
+}
+
+function filterOwnerVehiclesLocal(query) {
+  const q = query.toUpperCase();
+  let shown = 0;
+  $$("#tableBody tr").forEach((tr) => {
+    if (!tr.dataset.id) return;
+    const match = !q || tr.dataset.id.toUpperCase().includes(q);
+    tr.style.display = match ? "" : "none";
+    if (match) shown++;
+  });
+  if (currentOwner) {
+    $("#contentTitle").textContent = q
+      ? `${currentOwner} — tìm "${query}" (${shown})`
+      : currentOwner;
+  }
+  updateSelectAllBtn();
 }
 
 async function onVehicleSearchChange(query) {
@@ -296,7 +366,13 @@ async function loadVehiclesBySearch(query) {
 
     thead.innerHTML = `<tr>
       <th><input type="checkbox" id="checkAll" /></th>
-      ${displayCols.map((col) => `<th>${formatColName(col)}</th>`).join("")}
+      ${displayCols
+        .map((col) =>
+          SORTABLE_COLS.has(col)
+            ? `<th data-sort="${col}">${sortHeaderHTML(col)}</th>`
+            : `<th>${formatColName(col)}</th>`
+        )
+        .join("")}
       <th class="actions-th">Sửa/Xóa</th>
     </tr>`;
 
@@ -320,7 +396,9 @@ async function loadVehiclesBySearch(query) {
     }
 
     $("#contentTitle").textContent = `Tìm số xe: "${query}" (${vehicles.length} kết quả)`;
+    applySortIfAny();
     renderVehicleRows(tbody, vehicles, cfg, displayCols);
+    attachSortHandlers(tbody, cfg, displayCols);
     updateSelectAllBtn();
     updateBtnState();
   } catch (err) {
@@ -345,6 +423,10 @@ function renderVehicleRows(tbody, data, cfg, displayCols) {
     `;
 
     const cb = tr.querySelector('input[type="checkbox"]');
+    if (selectedIds.has(String(idVal))) {
+      cb.checked = true;
+      tr.classList.add("selected");
+    }
     cb.addEventListener("change", () => {
       toggleSelection(String(idVal), cb.checked);
       tr.classList.toggle("selected", cb.checked);
@@ -374,7 +456,13 @@ async function loadVehicles() {
 
     thead.innerHTML = `<tr>
       <th><input type="checkbox" id="checkAll" /></th>
-      ${cfg.displayCols.map((col) => `<th>${formatColName(col)}</th>`).join("")}
+      ${cfg.displayCols
+        .map((col) =>
+          SORTABLE_COLS.has(col)
+            ? `<th data-sort="${col}">${sortHeaderHTML(col)}</th>`
+            : `<th>${formatColName(col)}</th>`
+        )
+        .join("")}
       <th class="actions-th">Sửa/Xóa</th>
     </tr>`;
 
@@ -397,7 +485,9 @@ async function loadVehicles() {
       return;
     }
 
+    applySortIfAny();
     renderVehicleRows(tbody, vehicles, cfg, cfg.displayCols);
+    attachSortHandlers(tbody, cfg, cfg.displayCols);
 
     updateSelectAllBtn();
     updateBtnState();
@@ -667,23 +757,24 @@ function setupAddButtons() {
   $("#btnRefresh")?.addEventListener("click", refreshAll);
 }
 
-async function refreshAll() {
+async function refreshAll({ preferOwner = null } = {}) {
   const btn = $("#btnRefresh");
   if (btn) btn.disabled = true;
-  const prevOwner = currentOwner;
+  const targetOwner = preferOwner || currentOwner;
   try {
     await loadOwners();
-    if (prevOwner) {
-      const li = [...$$("#ownerList li")].find((l) => l.dataset.owner === prevOwner);
+    if (targetOwner) {
+      const li = [...$$("#ownerList li")].find((l) => l.dataset.owner === targetOwner);
       if (li) {
         li.classList.add("active");
-        currentOwner = prevOwner;
+        currentOwner = targetOwner;
+        $("#contentTitle").textContent = targetOwner;
+        $("#emptyState").classList.add("hidden");
         await loadVehicles();
       } else {
         currentOwner = null;
       }
     }
-    showToast("Đã làm mới", "success");
   } catch (err) {
     showToast("Lỗi khi làm mới: " + err.message, "error");
   } finally {
@@ -962,11 +1053,11 @@ function openAddVehicleModal() {
     <div class="form-row">
       <div class="form-group">
         <label>Ngày hiệu lực</label>
-        <input type="text" id="xe_ngayHieuLuc" autocomplete="off" />
+        <input type="text" id="xe_ngayHieuLuc" autocomplete="off" placeholder="dd/mm/yyyy" />
       </div>
       <div class="form-group">
         <label>Ngày hết hạn <span class="required">*</span></label>
-        <input type="text" id="xe_ngayHetHan" autocomplete="off" />
+        <input type="text" id="xe_ngayHetHan" autocomplete="off" placeholder="dd/mm/yyyy" />
       </div>
     </div>
     <div class="form-group">
@@ -989,17 +1080,12 @@ function openAddVehicleModal() {
       showToast("Vui lòng nhập ít nhất 1 biển số", "error");
       return;
     }
-    const ngayHetHan = ddmmyyyyToISO($("#xe_ngayHetHan").value);
+    const ngayHetHan = $("#xe_ngayHetHan").value;
     if (!ngayHetHan) {
-      showToast("Ngày hết hạn không hợp lệ (dd/mm/yyyy)", "error");
+      showToast("Vui lòng chọn ngày hết hạn", "error");
       return;
     }
-    const ngayHieuLucRaw = $("#xe_ngayHieuLuc").value.trim();
-    const ngayHieuLuc = ngayHieuLucRaw ? ddmmyyyyToISO(ngayHieuLucRaw) : null;
-    if (ngayHieuLucRaw && !ngayHieuLuc) {
-      showToast("Ngày hiệu lực không hợp lệ (dd/mm/yyyy)", "error");
-      return;
-    }
+    const ngayHieuLuc = $("#xe_ngayHieuLuc").value || null;
     const ghiChuVal = $("#xe_ghiChu").value.trim();
     if (!ghiChuVal) {
       showToast("Vui lòng nhập 'Chủ xe / ghi chú' (cột group ở sidebar)", "error");
@@ -1031,7 +1117,7 @@ function openAddVehicleModal() {
     if (fail.length === 0) {
       showToast(`Đã thêm ${ok.length} xe thành công`, "success");
       closeModal();
-      await loadOwners();
+      await refreshAll({ preferOwner: ghiChuVal });
     } else if (ok.length === 0) {
       showToast(`Lỗi: ${fail.map(f => f.bienSo + ' (' + f.msg + ')').join('; ')}`, "error");
       setSubmitLoading(false);
@@ -1041,7 +1127,7 @@ function openAddVehicleModal() {
       $("#xe_bienSo").value = fail.map(f => f.bienSo).join("\n");
       updatePlateCount();
       setSubmitLoading(false);
-      await loadOwners();
+      await refreshAll({ preferOwner: ghiChuVal });
     }
   });
 
@@ -1050,10 +1136,8 @@ function openAddVehicleModal() {
     updatePlateCount();
   });
 
-  $("#xe_ngayHetHan").value = isoToDDMMYYYY(defaultExpiry);
-  $("#xe_ngayHieuLuc").value = isoToDDMMYYYY(startOfMonthISO());
-  attachDateMask($("#xe_ngayHetHan"));
-  attachDateMask($("#xe_ngayHieuLuc"));
+  initFlatpickr($("#xe_ngayHetHan"), defaultExpiry);
+  initFlatpickr($("#xe_ngayHieuLuc"), startOfMonthISO());
 
   setupCustomerCombo();
   updatePlateCount();
@@ -1187,6 +1271,18 @@ function isoToDDMMYYYY(val) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+function initFlatpickr(inputEl, defaultISO) {
+  if (!inputEl || typeof flatpickr !== "function") return null;
+  return flatpickr(inputEl, {
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d/m/Y",
+    allowInput: true,
+    locale: (flatpickr.l10ns && flatpickr.l10ns.vn) || undefined,
+    defaultDate: defaultISO || null,
+  });
 }
 
 function attachDateMask(inputEl) {
