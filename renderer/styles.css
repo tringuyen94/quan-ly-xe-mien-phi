@@ -990,8 +990,8 @@ th input[type="checkbox"] {
 .header-btn {
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: linear-gradient(135deg, rgba(99, 179, 237, 0.35), rgba(72, 187, 120, 0.35));
   color: white;
   font-size: 12px;
   font-weight: 600;
@@ -1002,6 +1002,7 @@ th input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .header-btn .btn-icon {
@@ -1012,9 +1013,10 @@ th input[type="checkbox"] {
 }
 
 .header-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, rgba(99, 179, 237, 0.55), rgba(72, 187, 120, 0.55));
+  border-color: rgba(255, 255, 255, 0.7);
   transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
 .header-btn:active {
