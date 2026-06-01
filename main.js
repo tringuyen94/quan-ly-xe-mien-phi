@@ -557,7 +557,10 @@ ipcMain.handle("update-install", async () => {
     try { w.removeAllListeners("close"); w.destroy(); } catch (_) {}
   });
   try { app.releaseSingleInstanceLock(); } catch (_) {}
-  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  // isSilent=false → wizard hiện ra cho user click Next (oneClick: false yêu cầu);
+  // silent install qua /S flag suppress wizard → install fail âm thầm, app
+  // relaunch lại version cũ → loop "đã có phiên bản mới".
+  setImmediate(() => autoUpdater.quitAndInstall(false, true));
 });
 
 ipcMain.handle("update-check", () => {
