@@ -76,3 +76,24 @@
   RMDir /r "$INSTDIR"
   ClearErrors
 !macroend
+
+; --- THE definitive fix for "Failed to uninstall old application files" ---
+; electron-builder's handleUninstallResult in installUtil.nsh shows that
+; localized MessageBox + Quit whenever the OLD uninstaller exits with
+; non-zero code (e.g. because a file was locked momentarily).
+;
+; That function has an early-return escape hatch: if customUnInstallCheck
+; is defined, it's executed and the function returns BEFORE the exit-code
+; check. Same for HKEY_CURRENT_USER path via customUnInstallCheckCurrentUser.
+;
+; We override both with no-op stubs so the new installer NEVER aborts the
+; upgrade just because the old uninstaller failed cleanup. The
+; customRemoveFiles + killAppHard macros above already do best-effort
+; cleanup; if any file remained, the new installer will overwrite it.
+!macro customUnInstallCheck
+  DetailPrint "customUnInstallCheck: bypassing exit code check (R0=$R0)"
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  DetailPrint "customUnInstallCheckCurrentUser: bypassing exit code check (R0=$R0)"
+!macroend
