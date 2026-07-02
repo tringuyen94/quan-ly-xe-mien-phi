@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Menu, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const log = require("electron-log");
 const path = require("path");
 const sql = require("mssql");
 
@@ -497,6 +498,24 @@ ipcMain.handle("delete-customer", async (_event, maKhachHang) => {
   }
 });
 
+// Dùng dialog.showMessageBox thay cho window.confirm() ở renderer:
+// confirm()/alert() native trên Windows làm cửa sổ mất focus/chuột
+// sau khi đóng dialog (bug Electron đã biết).
+ipcMain.handle("confirm-dialog", async (event, { title, message, detail }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showMessageBox(win, {
+    type: "warning",
+    title: title || "Xác nhận",
+    message: message || "",
+    detail: detail || "",
+    buttons: ["Xóa", "Hủy"],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  return result.response === 0;
+});
+
 ipcMain.handle("get-app-version", () => {
   return app.getVersion();
 });
@@ -513,7 +532,14 @@ ipcMain.handle("test-connection", async () => {
 // ---- Auto Updater ----
 
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+// false: KHÔNG tự cài silent (/S) khi user đóng app — silent install với
+// assisted installer (oneClick: false) fail âm thầm → app relaunch bản cũ.
+// Đường cài duy nhất là bấm nút "Cài đặt" → quitAndInstall(false) hiện wizard.
+autoUpdater.autoInstallOnAppQuit = false;
+// Ghi log updater ra file để chẩn đoán khi lỗi trên máy user:
+// Windows: %AppData%\quan-ly-xe\logs\main.log
+autoUpdater.logger = log;
+log.transports.file.level = "info";
 
 function setupAutoUpdater(win) {
   autoUpdater.on("update-available", (info) => {

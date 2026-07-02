@@ -351,6 +351,9 @@ async function loadVehiclesBySearch(query) {
   const tbody = $("#tableBody");
   const thead = $("#tableHead");
   tbody.innerHTML = "";
+  // Reset selection khi đổi từ khóa tìm kiếm — nếu giữ lại, xe đã tick ở kết
+  // quả cũ (không còn hiển thị) vẫn bị cập nhật khi bấm "Cập nhật"
+  selectedIds.clear();
   const cfg = tableConfig[currentTable];
   const displayCols = cfg.displayCols.includes(cfg.ownerCol)
     ? cfg.displayCols
@@ -449,6 +452,8 @@ async function loadVehicles() {
   const tbody = $("#tableBody");
   const thead = $("#tableHead");
   tbody.innerHTML = "";
+  // Reset selection mỗi lần reload danh sách (đổi chủ xe, refresh, sau update)
+  selectedIds.clear();
 
   try {
     vehicles = await window.api.getVehicles(currentTable, currentOwner);
@@ -551,9 +556,6 @@ function setupActions() {
       toggleSelection(cb.dataset.id, newChecked);
       tr.classList.toggle("selected", newChecked);
     });
-
-    const checkAll = $("#checkAll");
-    if (checkAll) checkAll.checked = !allSelected;
 
     updateSelectAllBtn();
   });
@@ -920,7 +922,12 @@ function openEditCustomerModal(c) {
 
 async function confirmDeleteCustomer(c, refreshQuery) {
   const name = [c.ho, c.ten].filter(Boolean).join(" ") || c.tenCuaHang || `#${c.maKhachHang}`;
-  if (!confirm(`Xóa khách hàng #${c.maKhachHang} — ${name}?\n\nNếu KH còn xe, xóa sẽ bị từ chối.`)) return;
+  const ok = await window.api.confirmDialog({
+    title: "Xóa khách hàng",
+    message: `Xóa khách hàng #${c.maKhachHang} — ${name}?`,
+    detail: "Nếu KH còn xe, xóa sẽ bị từ chối.",
+  });
+  if (!ok) return;
   try {
     const r = await window.api.deleteCustomer(c.maKhachHang);
     if (r.success) {
@@ -1421,7 +1428,13 @@ function openEditVehicleModal(v) {
 async function confirmDeleteVehicle(v) {
   const cfg = tableConfig[currentTable];
   const idVal = v[cfg.idCol];
-  if (!confirm(`Xóa xe ${idVal}?\n\nThao tác không thể hoàn tác.`)) return;
+  // Không dùng confirm() native — gây mất focus/chuột sau khi đóng dialog trên Windows
+  const ok = await window.api.confirmDialog({
+    title: "Xóa xe",
+    message: `Xóa xe ${idVal}?`,
+    detail: "Thao tác không thể hoàn tác.",
+  });
+  if (!ok) return;
   try {
     const r = await window.api.deleteVehicle(currentTable, idVal);
     if (r.success) {
@@ -1481,7 +1494,13 @@ function setupAutoUpdate() {
 
   window.api.onUpdateError((msg) => {
     console.error("Update error:", msg);
-    banner.style.display = "none";
+    // Hiện lỗi thật lên banner thay vì ẩn đi — bản production không có
+    // DevTools nên nếu ẩn thì không bao giờ biết lỗi gì để báo/chẩn đoán
+    banner.style.display = "flex";
+    text.textContent = `Lỗi cập nhật: ${msg}`;
+    progressBar.style.display = "none";
+    btnDownload.style.display = "none";
+    btnInstall.style.display = "none";
   });
 
   btnDownload.addEventListener("click", () => {

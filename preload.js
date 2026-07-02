@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("api", {
   insertVehicle: (data) => ipcRenderer.invoke("insert-vehicle", data),
   updateVehicle: (data) => ipcRenderer.invoke("update-vehicle", data),
   deleteVehicle: (tableName, bienSo) => ipcRenderer.invoke("delete-vehicle", tableName, bienSo),
+  confirmDialog: (opts) => ipcRenderer.invoke("confirm-dialog", opts),
   testConnection: () => ipcRenderer.invoke("test-connection"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
 
