@@ -118,6 +118,7 @@ async function init() {
   setupActions();
   setupModal();
   setupAddButtons();
+  setupBagacViewer();
   loadOwners();
 }
 
@@ -1550,7 +1551,7 @@ function renderBagacTable() {
     tr.addEventListener("click", () => openBagacDetail(r));
     tr.querySelector(".btn-xem-anh").addEventListener("click", (e) => {
       e.stopPropagation();
-      openBagacGallery(r);
+      openBagacViewer(r);
     });
     tbody.appendChild(tr);
   });
@@ -1618,82 +1619,156 @@ function formatDateTime(val) {
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 
-// ---- Gallery ảnh lượt vào ----
+// ---- Trình xem ảnh lượt vào (toàn màn hình) ----
 
-const BAGAC_IMG_PAGE = 6;
-let bagacGallery = null; // { bienSo, from, to, offset, total }
+const VIEWER_PAGE = 12;
+let viewer = null; // { bienSo, from, to, entries, total, current, pinned, loading }
 
-async function openBagacGallery(row) {
-  const from = $("#bagacFrom").value;
-  const to = $("#bagacTo").value;
-  bagacGallery = { bienSo: row.bienSo, from, to, offset: 0, total: null };
-
-  const body = `
-    <div class="bagac-detail-meta" id="bagacGalleryMeta">Đang tải ảnh...</div>
-    <div class="bagac-gallery" id="bagacGalleryList"></div>
-    <div class="bagac-gallery-footer">
-      <button class="btn btn-outline" id="btnBagacMoreImgs" style="display:none" type="button">Tải thêm</button>
-    </div>`;
-  openModal(`Ảnh lượt vào — ${row.bienSo}`, body, null, "Lưu", {
-    hideSubmit: true,
-    wide: true,
+function openBagacViewer(row) {
+  viewer = {
+    bienSo: row.bienSo,
+    from: $("#bagacFrom").value,
+    to: $("#bagacTo").value,
+    entries: [],
+    total: null,
+    current: 0,
+    pinned: null,
+    loading: false,
+  };
+  $("#bagacViewerTitle").innerHTML = `<strong>${escapeHTML(row.bienSo)}</strong> — đang tải...`;
+  $("#bagacViewerStrip").innerHTML = "";
+  $("#viewerPaneMain").innerHTML = "";
+  $("#viewerPanePinned").style.display = "none";
+  $("#bagacViewer").classList.remove("comparing");
+  $("#btnViewerCompare").textContent = "So sánh";
+  $("#bagacViewer").classList.remove("hidden");
+  fetchViewerPage().then(() => {
+    if (!viewer) return;
+    if (viewer.entries.length) {
+      viewerGoto(0);
+    } else {
+      $("#viewerPaneMain").innerHTML =
+        '<div class="bagac-no-img">Không có lượt vào nào trong khoảng đã chọn</div>';
+    }
   });
-  $("#btnBagacMoreImgs").addEventListener("click", loadBagacGalleryPage);
-  await loadBagacGalleryPage();
 }
 
-async function loadBagacGalleryPage() {
-  const g = bagacGallery;
-  if (!g) return;
-  const btn = $("#btnBagacMoreImgs");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Đang tải...";
-  }
+async function fetchViewerPage() {
+  const v = viewer;
+  if (!v || v.loading) return;
+  if (v.total !== null && v.entries.length >= v.total) return;
+  v.loading = true;
   try {
-    const res = await window.api.getBagacImages(g.bienSo, g.from, g.to, g.offset, BAGAC_IMG_PAGE);
-    g.total = res.total;
-    g.offset += res.entries.length;
-
-    const list = $("#bagacGalleryList");
-    if (!list) return; // modal đã đóng trong lúc chờ
-    for (const en of res.entries) {
-      const block = document.createElement("div");
-      block.className = "bagac-gallery-entry";
-      const imgsHTML = en.images.length
-        ? en.images
-            .map((rel) => `<img src="imgx://img/${rel}" loading="lazy" alt="" />`)
-            .join("")
-        : `<span class="bagac-no-img">(không tìm thấy ảnh)</span>`;
-      block.innerHTML = `
-        <div class="bagac-gallery-entry-head">
-          ${formatDateTime(en.ngayGioVao)} — Làn ${escapeHTML(en.lanXeVao)}
-        </div>
-        <div class="bagac-img-grid">${imgsHTML}</div>`;
-      block.querySelectorAll("img").forEach((img) => {
-        img.addEventListener("click", () => img.classList.toggle("zoomed"));
-        img.addEventListener("error", () => (img.style.display = "none"));
-      });
-      list.appendChild(block);
-    }
-
-    const meta = $("#bagacGalleryMeta");
-    if (meta) {
-      meta.innerHTML = `Đã hiện <strong>${g.offset}</strong> / ${Number(g.total).toLocaleString("vi-VN")} lượt vào (${isoToDDMMYYYY(g.from)} – ${isoToDDMMYYYY(g.to)}), mới nhất trước`;
-    }
-    if (btn) {
-      const more = g.offset < g.total;
-      btn.style.display = more ? "" : "none";
-      btn.disabled = false;
-      btn.textContent = "Tải thêm";
-    }
+    const res = await window.api.getBagacImages(v.bienSo, v.from, v.to, v.entries.length, VIEWER_PAGE);
+    if (viewer !== v) return; // viewer đã đóng/mở biển khác trong lúc chờ
+    v.total = res.total;
+    const startIdx = v.entries.length;
+    v.entries.push(...res.entries);
+    appendViewerChips(startIdx);
+    $("#bagacViewerTitle").innerHTML =
+      `<strong>${escapeHTML(v.bienSo)}</strong> — ${Number(v.total).toLocaleString("vi-VN")} lượt vào (${isoToDDMMYYYY(v.from)} – ${isoToDDMMYYYY(v.to)})`;
   } catch (err) {
     showToast("Lỗi tải ảnh: " + err.message, "error");
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Tải thêm";
-    }
+  } finally {
+    v.loading = false;
   }
+}
+
+function renderViewerPane(paneEl, en, isPinned) {
+  const imgs = en.images.length
+    ? en.images.map((rel) => `<img src="imgx://img/${rel}" alt="" />`).join("")
+    : `<div class="bagac-no-img">(không tìm thấy ảnh)</div>`;
+  paneEl.innerHTML = `
+    <div class="bagac-pane-head">${isPinned ? '<span class="bagac-pin-tag">GHIM</span> ' : ""}${formatDateTime(en.ngayGioVao)} — Làn ${escapeHTML(en.lanXeVao)}</div>
+    <div class="bagac-pane-imgs">${imgs}</div>`;
+  paneEl.querySelectorAll("img").forEach((img) => {
+    img.addEventListener("click", () => {
+      $("#bagacViewerZoomImg").src = img.src;
+      $("#bagacViewerZoom").classList.remove("hidden");
+    });
+    img.addEventListener("error", () => (img.style.display = "none"));
+  });
+}
+
+function appendViewerChips(startIdx) {
+  const strip = $("#bagacViewerStrip");
+  const v = viewer;
+  for (let i = startIdx; i < v.entries.length; i++) {
+    const en = v.entries[i];
+    const d = new Date(en.ngayGioVao);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "bagac-chip" + (en.images.length ? "" : " no-img");
+    chip.dataset.idx = i;
+    chip.textContent =
+      `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")} ` +
+      `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} · L${en.lanXeVao}`;
+    chip.addEventListener("click", () => viewerGoto(i));
+    strip.appendChild(chip);
+  }
+}
+
+function viewerGoto(i) {
+  const v = viewer;
+  if (!v || i < 0 || i >= v.entries.length) return;
+  v.current = i;
+  renderViewerPane($("#viewerPaneMain"), v.entries[i], false);
+  $$("#bagacViewerStrip .bagac-chip").forEach((c) =>
+    c.classList.toggle("active", Number(c.dataset.idx) === i)
+  );
+  const chip = $(`#bagacViewerStrip .bagac-chip[data-idx="${i}"]`);
+  chip?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  // Sắp chạm cuối danh sách đã tải → nạp sẵn trang kế, khỏi cần nút Tải thêm
+  if (v.entries.length - i <= 3) fetchViewerPage();
+}
+
+function toggleViewerCompare() {
+  const v = viewer;
+  if (!v || !v.entries.length) return;
+  const pane = $("#viewerPanePinned");
+  if (v.pinned === null) {
+    v.pinned = v.current;
+    renderViewerPane(pane, v.entries[v.pinned], true);
+    pane.style.display = "";
+    $("#bagacViewer").classList.add("comparing");
+    $("#btnViewerCompare").textContent = "Bỏ ghim";
+    // Nhảy pane phải sang lượt kế để có 2 lượt khác nhau cạnh nhau ngay
+    if (v.current + 1 < v.entries.length) viewerGoto(v.current + 1);
+  } else {
+    v.pinned = null;
+    pane.style.display = "none";
+    $("#bagacViewer").classList.remove("comparing");
+    $("#btnViewerCompare").textContent = "So sánh";
+  }
+}
+
+function closeViewerZoom() {
+  $("#bagacViewerZoom").classList.add("hidden");
+  $("#bagacViewerZoomImg").src = "";
+}
+
+function closeBagacViewer() {
+  viewer = null;
+  closeViewerZoom();
+  $("#bagacViewer").classList.add("hidden");
+}
+
+function setupBagacViewer() {
+  $("#btnViewerClose").addEventListener("click", closeBagacViewer);
+  $("#btnViewerCompare").addEventListener("click", toggleViewerCompare);
+  $("#bagacViewerZoom").addEventListener("click", closeViewerZoom);
+  document.addEventListener("keydown", (e) => {
+    if (!viewer || $("#bagacViewer").classList.contains("hidden")) return;
+    if (e.key === "Escape") {
+      // Zoom mở thì Esc chỉ đóng zoom; modal chung không mở nên handler của nó no-op
+      if (!$("#bagacViewerZoom").classList.contains("hidden")) closeViewerZoom();
+      else closeBagacViewer();
+    } else if (e.key === "ArrowRight") {
+      viewerGoto(viewer.current + 1);
+    } else if (e.key === "ArrowLeft") {
+      viewerGoto(viewer.current - 1);
+    }
+  });
 }
 
 // ---- Auto Update ----

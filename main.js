@@ -591,8 +591,9 @@ ipcMain.handle("get-bagac-entries", async (_event, bienSo, fromDate, toDate) => 
   }
 });
 
-// Ảnh các lượt vào của 1 biển: phân trang mới nhất trước, mỗi lượt quét
-// tối đa 8 hậu tố camera (<id>1.jpg .. <id>8.jpg) xem file nào tồn tại.
+// Ảnh các lượt vào của 1 biển: phân trang mới nhất trước. Chỉ lấy ảnh
+// camera 1 (<id>1.jpg — camera chính, có ở ~100% lượt); camera 4 trở đi
+// user không cần nên khỏi quét, đỡ 7 lần dò file qua SMB mỗi lượt.
 ipcMain.handle("get-bagac-images", async (_event, bienSo, fromDate, toDate, offset, limit) => {
   try {
     const db = await getPool();
@@ -617,13 +618,11 @@ ipcMain.handle("get-bagac-images", async (_event, bienSo, fromDate, toDate, offs
       const id = String(r.id).trim();
       const folder = id.substring(2, 8); // id = Làn(2) + YYMMDD(6) + HHMMSS(6)
       const images = [];
-      for (let cam = 1; cam <= 8; cam++) {
-        const file = `${id}${cam}.jpg`;
-        try {
-          await fs.promises.access(path.join(IMG_ROOT, folder, file));
-          images.push(`${folder}/${file}`);
-        } catch (_) {}
-      }
+      const file = `${id}1.jpg`;
+      try {
+        await fs.promises.access(path.join(IMG_ROOT, folder, file));
+        images.push(`${folder}/${file}`);
+      } catch (_) {}
       entries.push({ id, ngayGioVao: r.ngayGioVao, lanXeVao: r.lanXeVao, images });
     }
     return { total, entries };

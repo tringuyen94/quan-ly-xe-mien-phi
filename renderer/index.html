@@ -160,6 +160,28 @@
     </div>
   </div>
 
+  <!-- Trình xem ảnh lượt vào (toàn màn hình) -->
+  <div class="bagac-viewer hidden" id="bagacViewer">
+    <div class="bagac-viewer-header">
+      <div class="bagac-viewer-title" id="bagacViewerTitle"></div>
+      <div class="bagac-viewer-actions">
+        <span class="bagac-viewer-hint">◀ ▶ chuyển lượt · click ảnh phóng to · Esc đóng</span>
+        <button class="btn btn-outline" id="btnViewerCompare" type="button">So sánh</button>
+        <button class="bagac-viewer-close" id="btnViewerClose" type="button" aria-label="Đóng">&times;</button>
+      </div>
+    </div>
+    <div class="bagac-viewer-body">
+      <div class="bagac-viewer-pane" id="viewerPanePinned" style="display:none"></div>
+      <div class="bagac-viewer-pane" id="viewerPaneMain"></div>
+    </div>
+    <div class="bagac-viewer-strip-wrap">
+      <div class="bagac-viewer-strip" id="bagacViewerStrip"></div>
+    </div>
+    <div class="bagac-viewer-zoom hidden" id="bagacViewerZoom">
+      <img id="bagacViewerZoomImg" alt="" />
+    </div>
+  </div>
+
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>
 
