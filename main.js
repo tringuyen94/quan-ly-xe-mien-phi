@@ -39,9 +39,11 @@ const dbConfig = {
 };
 
 // Thư mục gốc ảnh cổng — máy Windows ở chợ map share \\192.168.10.101\imgs
-// thành ổ Y:\imgs. Cấu trúc: <IMG_ROOT>\<YYMMDD>\<id lượt vào><số camera>.jpg
-// Override bằng IMG_ROOT trong .env nếu máy nào map khác.
-const IMG_ROOT = process.env.IMG_ROOT || "Y:\\imgs";
+// THẲNG thành ổ Y: (file nằm ở Y:\<YYMMDD>\..., KHÔNG có tầng \imgs).
+// Cấu trúc: <IMG_ROOT>\<YYMMDD>\<id lượt vào><số camera>.jpg
+// Override bằng IMG_ROOT trong .env nếu máy nào map khác. Giữ dấu \ cuối:
+// "Y:" không có \ là đường dẫn tương-đối-theo-ổ, trỏ sai chỗ.
+const IMG_ROOT = process.env.IMG_ROOT || "Y:\\";
 
 // Scheme phục vụ ảnh cho renderer — phải đăng ký trước app ready
 protocol.registerSchemesAsPrivileged([
