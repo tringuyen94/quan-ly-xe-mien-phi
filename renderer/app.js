@@ -128,6 +128,13 @@ function setupTabs() {
     tab.addEventListener("click", () => {
       $$(".tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
+      // Tab thống kê không nằm trong TABLE_CONFIG — có view riêng,
+      // không đụng currentTable/owner list của tab dữ liệu thường
+      if (tab.dataset.table === "__bagacStats") {
+        showBagacTab();
+        return;
+      }
+      hideBagacTab();
       currentTable = tab.dataset.table;
       currentOwner = null;
       currentSidebarMode = "chuxe";
@@ -1453,6 +1460,154 @@ async function reloadCurrentView() {
   if (q) await loadVehiclesBySearch(q);
   else if (currentOwner) await loadVehicles();
   else await loadOwners();
+}
+
+// ---- Thống kê nhập chợ (xe ba gác) ----
+
+let bagacInited = false;
+let bagacRows = [];
+
+function showBagacTab() {
+  $("#mainView").style.display = "none";
+  $("#bagacMain").style.display = "flex";
+  if (bagacInited) return;
+  bagacInited = true;
+
+  const today = new Date();
+  const monthAgo = new Date();
+  monthAgo.setDate(today.getDate() - 30);
+  initFlatpickr($("#bagacFrom"), isoDateOnly(monthAgo));
+  initFlatpickr($("#bagacTo"), isoDateOnly(today));
+
+  $("#btnBagacLoad").addEventListener("click", loadBagacRanking);
+  loadBagacRanking();
+}
+
+function hideBagacTab() {
+  $("#bagacMain").style.display = "none";
+  $("#mainView").style.display = "flex";
+}
+
+async function loadBagacRanking() {
+  const from = $("#bagacFrom").value;
+  const to = $("#bagacTo").value;
+  if (!from || !to) {
+    showToast("Vui lòng chọn khoảng ngày", "error");
+    return;
+  }
+  if (from > to) {
+    showToast("'Từ ngày' phải trước hoặc bằng 'Đến ngày'", "error");
+    return;
+  }
+  const btn = $("#btnBagacLoad");
+  btn.disabled = true;
+  btn.textContent = "Đang tải...";
+  try {
+    bagacRows = await window.api.getBagacRanking(from, to);
+    renderBagacTable();
+  } catch (err) {
+    showToast("Lỗi tải thống kê: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Xem";
+  }
+}
+
+function renderBagacTable() {
+  const thead = $("#bagacTableHead");
+  const tbody = $("#bagacTableBody");
+  tbody.innerHTML = "";
+
+  if (!bagacRows.length) {
+    thead.innerHTML = "";
+    $("#bagacEmptyState").classList.remove("hidden");
+    return;
+  }
+  $("#bagacEmptyState").classList.add("hidden");
+
+  thead.innerHTML = `<tr>
+    <th>#</th>
+    <th>Biển số</th>
+    <th>Số lượt vào</th>
+    <th>Số làn</th>
+    <th>Lượt gần nhất</th>
+    <th>Mã KH</th>
+    <th>Chủ xe</th>
+    <th>Cửa hàng</th>
+  </tr>`;
+
+  bagacRows.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.className = "bagac-row";
+    const owner = [r.ho, r.ten].filter(Boolean).join(" ");
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><strong>${escapeHTML(r.bienSo)}</strong></td>
+      <td>${Number(r.soLuot).toLocaleString("vi-VN")}</td>
+      <td>${escapeHTML(r.soLan)}</td>
+      <td>${formatDateTime(r.luotGanNhat)}</td>
+      <td>${escapeHTML(r.maKhachHang ?? "")}</td>
+      <td>${escapeHTML(owner)}</td>
+      <td>${escapeHTML(r.tenCuaHang ?? "")}</td>`;
+    tr.addEventListener("click", () => openBagacDetail(r));
+    tbody.appendChild(tr);
+  });
+}
+
+async function openBagacDetail(row) {
+  const from = $("#bagacFrom").value;
+  const to = $("#bagacTo").value;
+  try {
+    const entries = await window.api.getBagacEntries(row.bienSo, from, to);
+    const rowsHTML = entries
+      .map(
+        (e, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${formatDateTime(e.ngayGioVao)}</td>
+          <td>${escapeHTML(e.lanXeVao ?? "")}</td>
+          <td>${escapeHTML(e.bienSoNhanDang ?? "")}</td>
+          <td>${escapeHTML(e.tenNhanVien || e.maNhanVienLanvao || "")}</td>
+        </tr>`
+      )
+      .join("");
+    const owner = [row.ho, row.ten].filter(Boolean).join(" ");
+    const ownerLine = owner
+      ? `<span>Chủ xe: <strong>${escapeHTML(owner)}</strong>${
+          row.tenCuaHang ? " — " + escapeHTML(row.tenCuaHang) : ""
+        }</span>`
+      : "";
+    const totalLuot = Number(row.soLuot) || entries.length;
+    const capNote =
+      entries.length < totalLuot
+        ? ` — hiển thị ${entries.length} lượt gần nhất`
+        : "";
+    const body = `
+      <div class="bagac-detail-meta">
+        <span><strong>${totalLuot.toLocaleString("vi-VN")}</strong> lượt vào (${isoToDDMMYYYY(from)} – ${isoToDDMMYYYY(to)})${capNote}</span>
+        ${ownerLine}
+      </div>
+      <div class="bagac-detail-table">
+        <table>
+          <thead><tr><th>#</th><th>Ngày giờ vào</th><th>Làn</th><th>Biển ANPR</th><th>NV trực</th></tr></thead>
+          <tbody>${rowsHTML}</tbody>
+        </table>
+      </div>`;
+    openModal(`Chi tiết lượt vào — ${row.bienSo}`, body, null, "Lưu", {
+      hideSubmit: true,
+      wide: true,
+    });
+  } catch (err) {
+    showToast("Lỗi tải chi tiết: " + err.message, "error");
+  }
+}
+
+function formatDateTime(val) {
+  if (!val) return "";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return String(val);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${formatDate(d)} ${hh}:${mi}`;
 }
 
 // ---- Auto Update ----

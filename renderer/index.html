@@ -54,10 +54,11 @@
   <!-- Tab bar -->
   <nav class="tab-bar">
     <button class="tab active" data-table="tblXeMienPhi">Xe Miễn Phí</button>
+    <button class="tab" data-table="__bagacStats">Thống Kê Nhập Chợ</button>
   </nav>
 
   <!-- Main content -->
-  <div class="main">
+  <div class="main" id="mainView">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-tabs">
@@ -112,6 +113,32 @@
           </div>
           <p>Chọn chủ xe ở cột bên trái hoặc tìm số xe để xem danh sách</p>
           <span class="empty-hint">Tìm theo tên chủ xe hoặc nhập số xe để tìm toàn bảng</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Thống kê nhập chợ (xe ba gác) -->
+  <div class="main" id="bagacMain" style="display:none">
+    <section class="content">
+      <div class="content-header">
+        <h3>Xe nhập chợ nhiều nhất — Top 100</h3>
+        <div class="content-header-actions bagac-controls">
+          <label for="bagacFrom">Từ</label>
+          <input type="text" id="bagacFrom" class="vehicle-search bagac-date" />
+          <label for="bagacTo">Đến</label>
+          <input type="text" id="bagacTo" class="vehicle-search bagac-date" />
+          <button class="btn btn-primary" id="btnBagacLoad">Xem</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="bagacTable">
+          <thead id="bagacTableHead"></thead>
+          <tbody id="bagacTableBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="bagacEmptyState">
+          <p>Không có lượt vào nào trong khoảng ngày đã chọn</p>
+          <span class="empty-hint">Chỉ tính các biển đã đăng ký trong tblXeMienPhi</span>
         </div>
       </div>
     </section>

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("api", {
   insertVehicle: (data) => ipcRenderer.invoke("insert-vehicle", data),
   updateVehicle: (data) => ipcRenderer.invoke("update-vehicle", data),
   deleteVehicle: (tableName, bienSo) => ipcRenderer.invoke("delete-vehicle", tableName, bienSo),
+  getBagacRanking: (fromDate, toDate) => ipcRenderer.invoke("get-bagac-ranking", fromDate, toDate),
+  getBagacEntries: (bienSo, fromDate, toDate) => ipcRenderer.invoke("get-bagac-entries", bienSo, fromDate, toDate),
   confirmDialog: (opts) => ipcRenderer.invoke("confirm-dialog", opts),
   testConnection: () => ipcRenderer.invoke("test-connection"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),

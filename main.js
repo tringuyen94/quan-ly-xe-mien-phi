@@ -498,6 +498,71 @@ ipcMain.handle("delete-customer", async (_event, maKhachHang) => {
   }
 });
 
+// ---- Thống kê nhập chợ (xe ba gác / biển nội bộ) ----
+// Chỉ đếm các biển có đăng ký trong tblXeMienPhi để gắn được với khách hàng.
+// Xe ba gác không có lượt RA qua làn kiểm soát nên chỉ quét tblXeVaoCho.
+
+ipcMain.handle("get-bagac-ranking", async (_event, fromDate, toDate) => {
+  try {
+    const db = await getPool();
+    const result = await db
+      .request()
+      .input("from", sql.Date, new Date(fromDate))
+      .input("to", sql.Date, new Date(toDate))
+      .query(`
+        SELECT TOP 100
+          v.bienSo,
+          COUNT(*)                   AS soLuot,
+          COUNT(DISTINCT v.lanXeVao) AS soLan,
+          MAX(v.ngayGioVao)          AS luotGanNhat,
+          mp.maKhachHang, kh.ho, kh.ten, kh.tenCuaHang
+        FROM tblXeVaoCho v
+        JOIN tblXeMienPhi mp ON mp.bienSo = v.bienSo
+        LEFT JOIN tblKhachHang kh ON kh.maKhachHang = mp.maKhachHang
+        WHERE v.ngayGioVao >= @from AND v.ngayGioVao < DATEADD(day, 1, @to)
+          -- Chỉ lấy ba gác/xe nội bộ: loại biển VN chuẩn (xe tải/ô tô)
+          -- = 2 số + 1-2 chữ + 4-5 số, cùng regex với detect-fake-plates.js
+          AND NOT (
+            RTRIM(v.bienSo) LIKE '[0-9][0-9][A-Z][0-9][0-9][0-9][0-9]'
+            OR RTRIM(v.bienSo) LIKE '[0-9][0-9][A-Z][0-9][0-9][0-9][0-9][0-9]'
+            OR RTRIM(v.bienSo) LIKE '[0-9][0-9][A-Z][A-Z][0-9][0-9][0-9][0-9]'
+            OR RTRIM(v.bienSo) LIKE '[0-9][0-9][A-Z][A-Z][0-9][0-9][0-9][0-9][0-9]'
+          )
+        GROUP BY v.bienSo, mp.maKhachHang, kh.ho, kh.ten, kh.tenCuaHang
+        ORDER BY COUNT(*) DESC
+      `);
+    return result.recordset;
+  } catch (err) {
+    console.error("GET BAGAC RANKING ERROR:", err.message);
+    throw err;
+  }
+});
+
+ipcMain.handle("get-bagac-entries", async (_event, bienSo, fromDate, toDate) => {
+  try {
+    const db = await getPool();
+    const result = await db
+      .request()
+      .input("bienSo", sql.NVarChar, String(bienSo || "").trim())
+      .input("from", sql.Date, new Date(fromDate))
+      .input("to", sql.Date, new Date(toDate))
+      .query(`
+        SELECT TOP 500 v.ngayGioVao, v.lanXeVao, v.bienSoNhanDang, v.loaive,
+               v.maNhanVienLanvao,
+               LTRIM(RTRIM(CONCAT(nv.ho, ' ', nv.ten))) AS tenNhanVien
+        FROM tblXeVaoCho v
+        LEFT JOIN tblNhanVien nv ON nv.maNhanVien = v.maNhanVienLanvao
+        WHERE v.bienSo = @bienSo
+          AND v.ngayGioVao >= @from AND v.ngayGioVao < DATEADD(day, 1, @to)
+        ORDER BY v.ngayGioVao DESC
+      `);
+    return result.recordset;
+  } catch (err) {
+    console.error("GET BAGAC ENTRIES ERROR:", err.message);
+    throw err;
+  }
+});
+
 // Dùng dialog.showMessageBox thay cho window.confirm() ở renderer:
 // confirm()/alert() native trên Windows làm cửa sổ mất focus/chuột
 // sau khi đóng dialog (bug Electron đã biết).

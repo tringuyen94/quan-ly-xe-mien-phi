@@ -1339,3 +1339,33 @@ th input[type="checkbox"] {
 .kh-list-table tr:hover td {
   background: var(--row-hover);
 }
+
+/* ===== Thống kê nhập chợ (xe ba gác) ===== */
+
+.bagac-controls label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bagac-date {
+  width: 130px;
+}
+
+.bagac-row {
+  cursor: pointer;
+}
+
+.bagac-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bagac-detail-table {
+  max-height: 420px;
+  overflow: auto;
+}
