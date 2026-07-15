@@ -1,7 +1,9 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, dialog, protocol, net } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
 const path = require("path");
+const fs = require("fs");
+const { pathToFileURL } = require("url");
 const sql = require("mssql");
 
 const isProd = app.isPackaged;
@@ -35,6 +37,30 @@ const dbConfig = {
     idleTimeoutMillis: 30000,
   },
 };
+
+// Thư mục gốc ảnh cổng — máy Windows ở chợ map share \\192.168.10.101\imgs
+// thành ổ Y:\imgs. Cấu trúc: <IMG_ROOT>\<YYMMDD>\<id lượt vào><số camera>.jpg
+// Override bằng IMG_ROOT trong .env nếu máy nào map khác.
+const IMG_ROOT = process.env.IMG_ROOT || "Y:\\imgs";
+
+// Scheme phục vụ ảnh cho renderer — phải đăng ký trước app ready
+protocol.registerSchemesAsPrivileged([
+  { scheme: "imgx", privileges: { standard: true, stream: true } },
+]);
+
+function registerImgProtocol() {
+  protocol.handle("imgx", (request) => {
+    // imgx://img/<YYMMDD>/<tên file>.jpg
+    const u = new URL(request.url);
+    const rel = decodeURIComponent(u.pathname).replace(/^\//, "");
+    const safe = /^[0-9]{6}\/[0-9A-Za-z]+\.jpg$/i.test(rel);
+    const full = path.join(IMG_ROOT, rel);
+    if (!safe || !path.normalize(full).startsWith(path.normalize(IMG_ROOT))) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    return net.fetch(pathToFileURL(full).toString());
+  });
+}
 
 let pool = null;
 
@@ -563,6 +589,48 @@ ipcMain.handle("get-bagac-entries", async (_event, bienSo, fromDate, toDate) => 
   }
 });
 
+// Ảnh các lượt vào của 1 biển: phân trang mới nhất trước, mỗi lượt quét
+// tối đa 8 hậu tố camera (<id>1.jpg .. <id>8.jpg) xem file nào tồn tại.
+ipcMain.handle("get-bagac-images", async (_event, bienSo, fromDate, toDate, offset, limit) => {
+  try {
+    const db = await getPool();
+    const result = await db
+      .request()
+      .input("bienSo", sql.NVarChar, String(bienSo || "").trim())
+      .input("from", sql.Date, new Date(fromDate))
+      .input("to", sql.Date, new Date(toDate))
+      .input("offset", sql.Int, Math.max(0, parseInt(offset, 10) || 0))
+      .input("limit", sql.Int, Math.min(20, parseInt(limit, 10) || 6))
+      .query(`
+        SELECT COUNT(*) AS total FROM tblXeVaoCho
+        WHERE bienSo = @bienSo AND ngayGioVao >= @from AND ngayGioVao < DATEADD(day, 1, @to);
+        SELECT id, ngayGioVao, lanXeVao FROM tblXeVaoCho
+        WHERE bienSo = @bienSo AND ngayGioVao >= @from AND ngayGioVao < DATEADD(day, 1, @to)
+        ORDER BY ngayGioVao DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
+      `);
+    const total = result.recordsets[0][0].total;
+    const entries = [];
+    for (const r of result.recordsets[1]) {
+      const id = String(r.id).trim();
+      const folder = id.substring(2, 8); // id = Làn(2) + YYMMDD(6) + HHMMSS(6)
+      const images = [];
+      for (let cam = 1; cam <= 8; cam++) {
+        const file = `${id}${cam}.jpg`;
+        try {
+          await fs.promises.access(path.join(IMG_ROOT, folder, file));
+          images.push(`${folder}/${file}`);
+        } catch (_) {}
+      }
+      entries.push({ id, ngayGioVao: r.ngayGioVao, lanXeVao: r.lanXeVao, images });
+    }
+    return { total, entries };
+  } catch (err) {
+    console.error("GET BAGAC IMAGES ERROR:", err.message);
+    throw err;
+  }
+});
+
 // Dùng dialog.showMessageBox thay cho window.confirm() ở renderer:
 // confirm()/alert() native trên Windows làm cửa sổ mất focus/chuột
 // sau khi đóng dialog (bug Electron đã biết).
@@ -675,6 +743,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    registerImgProtocol();
     mainWindow = createWindow();
     setupAutoUpdater(mainWindow);
   });

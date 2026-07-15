@@ -1529,11 +1529,10 @@ function renderBagacTable() {
     <th>#</th>
     <th>Biển số</th>
     <th>Số lượt vào</th>
-    <th>Số làn</th>
     <th>Lượt gần nhất</th>
-    <th>Mã KH</th>
     <th>Chủ xe</th>
     <th>Cửa hàng</th>
+    <th>Ảnh</th>
   </tr>`;
 
   bagacRows.forEach((r, i) => {
@@ -1544,12 +1543,15 @@ function renderBagacTable() {
       <td>${i + 1}</td>
       <td><strong>${escapeHTML(r.bienSo)}</strong></td>
       <td>${Number(r.soLuot).toLocaleString("vi-VN")}</td>
-      <td>${escapeHTML(r.soLan)}</td>
       <td>${formatDateTime(r.luotGanNhat)}</td>
-      <td>${escapeHTML(r.maKhachHang ?? "")}</td>
       <td>${escapeHTML(owner)}</td>
-      <td>${escapeHTML(r.tenCuaHang ?? "")}</td>`;
+      <td>${escapeHTML(r.tenCuaHang ?? "")}</td>
+      <td><button class="btn btn-outline btn-xem-anh" type="button">Xem ảnh</button></td>`;
     tr.addEventListener("click", () => openBagacDetail(r));
+    tr.querySelector(".btn-xem-anh").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openBagacGallery(r);
+    });
     tbody.appendChild(tr);
   });
 }
@@ -1605,9 +1607,93 @@ function formatDateTime(val) {
   if (!val) return "";
   const d = new Date(val);
   if (isNaN(d.getTime())) return String(val);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${formatDate(d)} ${hh}:${mi}`;
+  // ngayGioVao lưu giờ địa phương nhưng driver mssql đọc datetime thành UTC
+  // (useUTC mặc định) — phải dùng getUTC* để hiện đúng con số gốc trong DB,
+  // dùng getter local sẽ cộng thêm 7 tiếng (lệch cả ngày với lượt ban đêm)
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+}
+
+// ---- Gallery ảnh lượt vào ----
+
+const BAGAC_IMG_PAGE = 6;
+let bagacGallery = null; // { bienSo, from, to, offset, total }
+
+async function openBagacGallery(row) {
+  const from = $("#bagacFrom").value;
+  const to = $("#bagacTo").value;
+  bagacGallery = { bienSo: row.bienSo, from, to, offset: 0, total: null };
+
+  const body = `
+    <div class="bagac-detail-meta" id="bagacGalleryMeta">Đang tải ảnh...</div>
+    <div class="bagac-gallery" id="bagacGalleryList"></div>
+    <div class="bagac-gallery-footer">
+      <button class="btn btn-outline" id="btnBagacMoreImgs" style="display:none" type="button">Tải thêm</button>
+    </div>`;
+  openModal(`Ảnh lượt vào — ${row.bienSo}`, body, null, "Lưu", {
+    hideSubmit: true,
+    wide: true,
+  });
+  $("#btnBagacMoreImgs").addEventListener("click", loadBagacGalleryPage);
+  await loadBagacGalleryPage();
+}
+
+async function loadBagacGalleryPage() {
+  const g = bagacGallery;
+  if (!g) return;
+  const btn = $("#btnBagacMoreImgs");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang tải...";
+  }
+  try {
+    const res = await window.api.getBagacImages(g.bienSo, g.from, g.to, g.offset, BAGAC_IMG_PAGE);
+    g.total = res.total;
+    g.offset += res.entries.length;
+
+    const list = $("#bagacGalleryList");
+    if (!list) return; // modal đã đóng trong lúc chờ
+    for (const en of res.entries) {
+      const block = document.createElement("div");
+      block.className = "bagac-gallery-entry";
+      const imgsHTML = en.images.length
+        ? en.images
+            .map((rel) => `<img src="imgx://img/${rel}" loading="lazy" alt="" />`)
+            .join("")
+        : `<span class="bagac-no-img">(không tìm thấy ảnh)</span>`;
+      block.innerHTML = `
+        <div class="bagac-gallery-entry-head">
+          ${formatDateTime(en.ngayGioVao)} — Làn ${escapeHTML(en.lanXeVao)}
+        </div>
+        <div class="bagac-img-grid">${imgsHTML}</div>`;
+      block.querySelectorAll("img").forEach((img) => {
+        img.addEventListener("click", () => img.classList.toggle("zoomed"));
+        img.addEventListener("error", () => (img.style.display = "none"));
+      });
+      list.appendChild(block);
+    }
+
+    const meta = $("#bagacGalleryMeta");
+    if (meta) {
+      meta.innerHTML = `Đã hiện <strong>${g.offset}</strong> / ${Number(g.total).toLocaleString("vi-VN")} lượt vào (${isoToDDMMYYYY(g.from)} – ${isoToDDMMYYYY(g.to)}), mới nhất trước`;
+    }
+    if (btn) {
+      const more = g.offset < g.total;
+      btn.style.display = more ? "" : "none";
+      btn.disabled = false;
+      btn.textContent = "Tải thêm";
+    }
+  } catch (err) {
+    showToast("Lỗi tải ảnh: " + err.message, "error");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Tải thêm";
+    }
+  }
 }
 
 // ---- Auto Update ----

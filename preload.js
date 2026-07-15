@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("api", {
   deleteVehicle: (tableName, bienSo) => ipcRenderer.invoke("delete-vehicle", tableName, bienSo),
   getBagacRanking: (fromDate, toDate) => ipcRenderer.invoke("get-bagac-ranking", fromDate, toDate),
   getBagacEntries: (bienSo, fromDate, toDate) => ipcRenderer.invoke("get-bagac-entries", bienSo, fromDate, toDate),
+  getBagacImages: (bienSo, fromDate, toDate, offset, limit) =>
+    ipcRenderer.invoke("get-bagac-images", bienSo, fromDate, toDate, offset, limit),
   confirmDialog: (opts) => ipcRenderer.invoke("confirm-dialog", opts),
   testConnection: () => ipcRenderer.invoke("test-connection"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),

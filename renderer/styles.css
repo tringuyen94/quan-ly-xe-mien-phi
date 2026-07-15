@@ -1369,3 +1369,66 @@ th input[type="checkbox"] {
   max-height: 420px;
   overflow: auto;
 }
+
+/* ===== Gallery ảnh lượt vào ===== */
+
+.btn-xem-anh {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.bagac-gallery {
+  max-height: 480px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bagac-gallery-entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.bagac-gallery-entry-head {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--th-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.bagac-img-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+}
+
+.bagac-img-grid img {
+  height: 140px;
+  max-width: 100%;
+  border-radius: 6px;
+  cursor: zoom-in;
+  object-fit: cover;
+}
+
+.bagac-img-grid img.zoomed {
+  height: auto;
+  width: 100%;
+  cursor: zoom-out;
+  object-fit: contain;
+}
+
+.bagac-no-img {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px;
+}
+
+.bagac-gallery-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
